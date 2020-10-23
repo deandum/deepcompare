@@ -1,15 +1,15 @@
-# deepcompare
+# object-deep-compare
 A collection of comparison methods for objects in Javascript.
 
 ## Installation
 Using npm:
 ```
-npm install deepcompare
+npm install object-deep-compare
 ```
 
 In Node.js:
 ```js
-const deepcompare = require('deepcompare');
+const objectDeepCompare = require('object-deep-compare');
 ```
 
 ## Dependencies
@@ -35,7 +35,7 @@ const secondObject = {
 ```
 
 ```js
-deepcompare.CompareProperties(firstObject, secondObject);
+objectDeepCompare.CompareProperties(firstObject, secondObject);
 /*
 Will return: 
 {
@@ -59,7 +59,7 @@ const secondArray = [1, 2];
 ```
 
 ```js
-deepcompare.CompareArrays(firstArray, secondArray);
+objectDeepCompare.CompareArrays(firstArray, secondArray);
 /*
 Will return: true
 */
@@ -88,7 +88,7 @@ const secondObject = {
 ```
 
 ```js
-deepcompare.CompareValuesWithConflicts(firstObject, secondObject);
+objectDeepCompare.CompareValuesWithConflicts(firstObject, secondObject);
 /*
 Will return: ['nested.foo', 'nested.bar']
 */
