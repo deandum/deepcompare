@@ -1,4 +1,4 @@
-const objectDeepCompare  = require('../src/main');
+const objectDeepCompare  = require('src/main');
 
 const CompareProperties = (firstObject, secondObject) => {
 	if (!firstObject) { return null; }
