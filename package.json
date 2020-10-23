@@ -1,5 +1,5 @@
 {
-  "name": "deepcompare",
+  "name": "object-deep-compare",
   "version": "1.0.0",
   "description": "A collection of comparison methods for objects in Javascript",
   "main": "index.js",
