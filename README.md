@@ -40,7 +40,7 @@ objectDeepCompare.CompareProperties(firstObject, secondObject);
 Will return: 
 {
 	differences: ['bar'],
-	common: ['foo]
+	common: ['foo']
 }
 */
 ```
