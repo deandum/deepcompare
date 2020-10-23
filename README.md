@@ -18,7 +18,7 @@ const deepcompare = require('deepcompare');
 ## Dev Dependencies
 - `jest`
 
-## Library elements
+## Library Methods
 
 ### `CompareProperties` 
 This method compares the properties of two objects. It returns all the different and common properties between the two objects.
