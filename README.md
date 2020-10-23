@@ -20,7 +20,7 @@ const deepcompare = require('deepcompare');
 
 ## Library Methods
 
-### `CompareProperties` 
+### `CompareProperties`
 This method compares the properties of two objects. It returns all the different and common properties between the two objects.
 <br/>
 #### Example:
@@ -45,7 +45,9 @@ Will return:
 */
 ```
 
-Click here for more examples.
+Click [here](https://github.com/deandum/deepcompare/blob/main/tests/compare-properties.spec.js) for more examples.
+
+<hr>
 
 ### `CompareArrays`
 This method compares two arrays for equality. It returns true or false.
@@ -63,7 +65,9 @@ Will return: true
 */
 ```
 
-Click here for more examples.
+Click [here](https://github.com/deandum/deepcompare/blob/main/tests/compare-arrays.spec.js) for more examples.
+
+<hr>
 
 ### `CompareValuesWithConflicts`
 This method compares the properties of two objects (deep comparison). It returns an array. Each element in the array is the path of the property that is different.
@@ -84,13 +88,13 @@ const secondObject = {
 ```
 
 ```js
-deepcompare.CompareProperties(firstObject, secondObject);
+deepcompare.CompareValuesWithConflicts(firstObject, secondObject);
 /*
 Will return: ['nested.foo', 'nested.bar']
 */
 ```
 
-Click here for more examples.
+Click [here](https://github.com/deandum/deepcompare/blob/main/tests/compare-values-with-conflicts.spec.js) for more examples.
 
 ## License
 MIT © Dean Dumitru
