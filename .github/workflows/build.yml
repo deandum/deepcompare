@@ -1,4 +1,4 @@
-name: deepcompare
+name: build
 on:
   push:
     branches:
