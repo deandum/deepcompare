@@ -1,4 +1,4 @@
-import * as deepCompare from '../src/main';
+import * as deepCompare from '../index';
 
 describe('Test CompareArrays method', () => {
   let firstArray: any[];

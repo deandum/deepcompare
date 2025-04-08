@@ -1,4 +1,4 @@
-import * as deepCompare from '../src/main';
+import * as deepCompare from '../index';
 import { TypedComparisonResult, TypedDetailedDifference, TypeSafeComparisonOptions } from '../src/types';
 
 describe('Type-Safe Comparison Tests', () => {

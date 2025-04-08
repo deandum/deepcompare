@@ -1,13 +1,13 @@
-import * as deepCompare from '../src/main';
+import * as deepCompare from '../index';
 import { ComparePropertiesResult } from '../src/types';
 
 describe('Test Memoization functionality', () => {
   // Test the memoize utility function
-  describe('memoize utility function', () => {
+  describe('Memoize utility function', () => {
     it('should return consistent results for the same inputs', () => {
       // Create a simple function to test memoization
       const testFn = (a: number, b: number) => a + b;
-      const memoizedFn = deepCompare.memoize(testFn);
+      const memoizedFn = deepCompare.Memoize(testFn);
       
       // First call
       const result1 = memoizedFn(1, 2);
@@ -22,7 +22,7 @@ describe('Test Memoization functionality', () => {
     
     it('should handle complex objects as arguments', () => {
       const testFn = (obj: Record<string, any>) => obj.value;
-      const memoizedFn = deepCompare.memoize(testFn);
+      const memoizedFn = deepCompare.Memoize(testFn);
       
       const obj1 = { value: 42 };
       const obj2 = { value: 42 }; // Same structure, different reference

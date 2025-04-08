@@ -88,42 +88,6 @@ export interface DetailedDifference {
 }
 
 /**
- * Type guard to check if a value is an object (neither null nor an array)
- * @param value - The value to check
- * @returns Type predicate indicating if the value is a non-null, non-array object
- */
-export function isObjectGuard(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-/**
- * Type guard to check if a value is an array
- * @param value - The value to check
- * @returns Type predicate indicating if the value is an array
- */
-export function isArrayGuard(value: unknown): value is unknown[] {
-  return Array.isArray(value);
-}
-
-/**
- * Type guard to check if a value is a Date object
- * @param value - The value to check
- * @returns Type predicate indicating if the value is a Date
- */
-export function isDateGuard(value: unknown): value is Date {
-  return value instanceof Date;
-}
-
-/**
- * Type guard to check if a value is a RegExp object
- * @param value - The value to check
- * @returns Type predicate indicating if the value is a RegExp
- */
-export function isRegExpGuard(value: unknown): value is RegExp {
-  return value instanceof RegExp;
-}
-
-/**
  * Generic type for objects with compatible structures
  * This allows TypeScript to understand that objects can have different 
  * but compatible types, where one might be a subset of another
@@ -227,7 +191,7 @@ export interface TypeSafeComparisonOptions<T, U> extends ComparisonOptions {
   includeTypeInfo?: boolean;
   
   /**
-   * Custom comparator functions for specific property paths
+   * Custom comparators functions for specific property paths
    */
   customComparators?: Record<string, (value1: any, value2: any) => boolean>;
 } 
