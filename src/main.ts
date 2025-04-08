@@ -1,4 +1,6 @@
-import { ComparePropertiesResult, ComparisonOptions, DetailedDifference, DifferenceType, PathFilter, PathFilterMode } from './types';
+import { ComparePropertiesResult, ComparisonOptions, DetailedDifference, DifferenceType, PathFilter, PathFilterMode, 
+  isObjectGuard, isArrayGuard, isDateGuard, isRegExpGuard, TypeSafeComparisonOptions, TypedComparisonResult, 
+  TypedDetailedDifference, CompatibleObject } from './types';
 
 /**
  * Error thrown when a circular reference is detected and handling is set to 'error'
@@ -1323,6 +1325,330 @@ const MemoizedCompareValuesWithDetailedDifferences = memoize(
   compareValuesWithDetailedDifferencesKeyFn
 );
 
+/**
+ * Gets the type name of a value for better type information
+ * @param value - The value to get the type of
+ * @returns A string representing the type
+ */
+const getTypeName = (value: unknown): string => {
+  if (value === null) return 'null';
+  if (value === undefined) return 'undefined';
+  if (isArrayGuard(value)) return 'array';
+  if (isDateGuard(value)) return 'date';
+  if (isRegExpGuard(value)) return 'regexp';
+  if (isObjectGuard(value)) return 'object';
+  return typeof value;
+};
+
+/**
+ * Type-safe version of CompareArrays that includes type information in the result
+ * 
+ * @param firstArray - First array to compare
+ * @param secondArray - Second array to compare
+ * @param options - Optional comparison options (strict, circularReferences, pathFilter)
+ * @returns Object with isEqual flag and type information
+ */
+const TypeSafeCompareArrays = <T extends unknown[], U extends unknown[]>(
+  firstArray: T, 
+  secondArray: U,
+  options: ComparisonOptions = {}
+): TypedComparisonResult<T, U> => {
+  const isEqual = CompareArrays(firstArray, secondArray, options);
+  
+  return {
+    isEqual,
+    firstType: Array.isArray(firstArray) ? 'array' : (firstArray === null ? 'null' : 'undefined'),
+    secondType: Array.isArray(secondArray) ? 'array' : (secondArray === null ? 'null' : 'undefined')
+  };
+};
+
+/**
+ * Maps properties between objects with different structures
+ * 
+ * @param sourceObject - Source object
+ * @param propertyMapping - Mapping from source properties to target properties
+ * @returns A new object with mapped properties
+ */
+const mapObjectProperties = <T extends Record<string, unknown>, U extends Record<string, unknown>>(
+  sourceObject: T,
+  propertyMapping: Partial<Record<keyof T, keyof U>>
+): Partial<U> => {
+  const result = {} as Partial<U>;
+  
+  Object.entries(propertyMapping).forEach(([sourceKey, targetKey]) => {
+    if (sourceKey in sourceObject && targetKey) {
+      // @ts-ignore - We know these keys exist based on the check
+      result[targetKey] = sourceObject[sourceKey];
+    }
+  });
+  
+  return result;
+};
+
+/**
+ * Type-safe version of object comparison that supports objects with different structures
+ * 
+ * @param firstObject - First object to compare
+ * @param secondObject - Second object to compare
+ * @param options - Type-safe comparison options
+ * @returns Object with isEqual flag and type information
+ */
+const TypeSafeCompareObjects = <T extends Record<string, unknown>, U extends Record<string, unknown>>(
+  firstObject: T | null | undefined,
+  secondObject: U | null | undefined,
+  options: TypeSafeComparisonOptions<T, U> = {}
+): TypedComparisonResult<T, U> => {
+  // Handle null and undefined cases
+  if (!firstObject || !secondObject) {
+    return {
+      isEqual: firstObject === secondObject,
+      firstType: (firstObject === null ? 'null' : firstObject === undefined ? 'undefined' : 'object') as any,
+      secondType: (secondObject === null ? 'null' : secondObject === undefined ? 'undefined' : 'object') as any
+    };
+  }
+  
+  // Create a new object for comparison if property mapping is provided
+  if (options.propertyMapping && Object.keys(options.propertyMapping).length > 0) {
+    // Create a clean object with only mapped properties
+    const mappedFirstObject: Record<string, unknown> = {};
+    
+    // Apply property mapping
+    for (const [sourceKey, targetKey] of Object.entries(options.propertyMapping)) {
+      if (sourceKey in firstObject && targetKey) {
+        // Map the source property to the target property name
+        // @ts-ignore - We know these keys exist based on the check
+        mappedFirstObject[targetKey] = firstObject[sourceKey];
+      }
+    }
+    
+    // Use existing CompareValuesWithConflicts function for comparison
+    const conflicts = CompareValuesWithConflicts(
+      mappedFirstObject as any, 
+      secondObject, 
+      '', 
+      {
+        strict: options.strict,
+        circularReferences: options.circularReferences,
+        pathFilter: options.pathFilter
+      }
+    );
+    
+    return {
+      isEqual: conflicts.length === 0,
+      firstType: 'object' as any,
+      secondType: 'object' as any
+    };
+  } else {
+    // Without property mapping, do a regular comparison
+    const conflicts = CompareValuesWithConflicts(
+      firstObject as any, 
+      secondObject as any, 
+      '', 
+      {
+        strict: options.strict,
+        circularReferences: options.circularReferences,
+        pathFilter: options.pathFilter
+      }
+    );
+    
+    return {
+      isEqual: conflicts.length === 0,
+      firstType: 'object' as any,
+      secondType: 'object' as any
+    };
+  }
+};
+
+/**
+ * Type-safe version of detailed comparison that supports objects with different structures
+ * and provides type information
+ * 
+ * @param firstObject - First object to compare
+ * @param secondObject - Second object to compare
+ * @param options - Type-safe comparison options
+ * @returns Array of typed detailed differences with type information
+ */
+const TypeSafeCompareValuesWithDetailedDifferences = <T extends Record<string, unknown>, U extends Record<string, unknown>>(
+  firstObject: T | null | undefined,
+  secondObject: U | null | undefined,
+  options: TypeSafeComparisonOptions<T, U> = {}
+): TypedDetailedDifference[] => {
+  // Handle null and undefined cases
+  if (!firstObject || !secondObject) {
+    return [{
+      path: '',
+      type: (!firstObject && !secondObject) ? 'changed' : (!firstObject ? 'added' : 'removed'),
+      oldValue: firstObject,
+      newValue: secondObject,
+      oldValueType: getTypeName(firstObject),
+      newValueType: getTypeName(secondObject)
+    }];
+  }
+  
+  // Apply property mapping if provided
+  let mappedFirstObject: Record<string, unknown> = firstObject;
+  if (options.propertyMapping && Object.keys(options.propertyMapping).length > 0) {
+    mappedFirstObject = {
+      ...firstObject,
+      ...mapObjectProperties(firstObject, options.propertyMapping)
+    };
+  }
+  
+  // Get detailed differences using existing function
+  const differences = CompareValuesWithDetailedDifferences(
+    mappedFirstObject as any, 
+    secondObject, 
+    '', 
+    {
+      strict: options.strict,
+      circularReferences: options.circularReferences,
+      pathFilter: options.pathFilter
+    }
+  );
+  
+  // Enhance with type information if requested
+  if (options.includeTypeInfo) {
+    return differences.map(diff => ({
+      ...diff,
+      oldValueType: getTypeName(diff.oldValue),
+      newValueType: getTypeName(diff.newValue)
+    }));
+  }
+  
+  return differences as TypedDetailedDifference[];
+};
+
+/**
+ * Type guard that checks if two objects are equal
+ * Can be used to narrow types in conditional branches
+ * 
+ * @param firstObject - First object to compare
+ * @param secondObject - Second object to compare
+ * @param options - Optional comparison options
+ * @returns Type predicate indicating if the objects are equal
+ */
+const ObjectsAreEqual = <T extends Record<string, unknown>, U extends Record<string, unknown>>(
+  firstObject: T | null | undefined,
+  secondObject: U | null | undefined,
+  options: ComparisonOptions = {}
+): firstObject is (T & U) => {
+  if (!firstObject || !secondObject) {
+    return firstObject === secondObject;
+  }
+  
+  // For type guard functionality, we need to check if the first object contains all properties
+  // from the second object, this ensures the type narrowing works correctly
+  const firstObjectKeys = Object.keys(firstObject);
+  const secondObjectKeys = Object.keys(secondObject);
+  
+  // Check if all properties from second object exist in first object
+  for (const key of secondObjectKeys) {
+    if (!firstObjectKeys.includes(key)) {
+      return false;
+    }
+  }
+  
+  // For non-strict comparison, we need to check if property values are equal
+  // We specifically only compare the properties that exist in second object
+  const comparisonObject: Record<string, unknown> = {};
+  for (const key of secondObjectKeys) {
+    // @ts-ignore - We know these keys exist based on the check above
+    comparisonObject[key] = firstObject[key];
+  }
+  
+  // Now compare only the properties that matter for type guard
+  const conflicts = CompareValuesWithConflicts(
+    comparisonObject, 
+    secondObject, 
+    '', 
+    options
+  );
+  
+  return conflicts.length === 0;
+};
+
+/**
+ * Checks if the second object is a subset of the first object
+ * This is useful for checking if an object satisfies a specific interface
+ * 
+ * @param firstObject - Object to check against
+ * @param secondObject - Object that should be a subset
+ * @param options - Optional comparison options
+ * @returns Boolean indicating if secondObject is a subset of firstObject
+ */
+const IsSubset = <T extends Record<string, unknown>, U extends Record<string, unknown>>(
+  firstObject: T | null | undefined,
+  secondObject: U | null | undefined,
+  options: ComparisonOptions = {}
+): boolean => {
+  if (!firstObject || !secondObject) {
+    return false;
+  }
+  
+  // Create a filtered version of firstObject with only the keys from secondObject
+  const secondObjectKeys = Object.keys(secondObject);
+  const filteredFirstObject: Record<string, unknown> = {};
+  
+  for (const key of secondObjectKeys) {
+    if (key in firstObject) {
+      // @ts-ignore - We know these keys exist based on the check
+      filteredFirstObject[key] = firstObject[key];
+    } else {
+      return false; // If secondObject has a key that firstObject doesn't, it's not a subset
+    }
+  }
+  
+  // Now compare the filtered first object with the second object
+  const conflicts = CompareValuesWithConflicts(
+    filteredFirstObject as any, 
+    secondObject as any, 
+    '', 
+    options
+  );
+  
+  return conflicts.length === 0;
+};
+
+/**
+ * Gets the common type structure between two objects
+ * Useful for understanding what properties are shared between objects
+ * 
+ * @param firstObject - First object to compare
+ * @param secondObject - Second object to compare
+ * @returns A new object containing only common properties with their types
+ */
+const GetCommonStructure = <T extends Record<string, unknown>, U extends Record<string, unknown>>(
+  firstObject: T | null | undefined,
+  secondObject: U | null | undefined
+): Partial<CompatibleObject<T, U>> => {
+  if (!firstObject || !secondObject) {
+    return {};
+  }
+  
+  const result = {} as Partial<CompatibleObject<T, U>>;
+  const { common } = CompareProperties(firstObject as any, secondObject as any);
+  
+  for (const key of common) {
+    if (key in firstObject && key in secondObject) {
+      // @ts-ignore - We know these keys exist based on the check
+      const firstValue = firstObject[key];
+      // @ts-ignore
+      const secondValue = secondObject[key];
+      
+      // If both values are objects, recursively get their common structure
+      if (isObjectGuard(firstValue) && isObjectGuard(secondValue)) {
+        // @ts-ignore
+        result[key] = GetCommonStructure(firstValue, secondValue);
+      } else {
+        // @ts-ignore
+        result[key] = firstValue;
+      }
+    }
+  }
+  
+  return result;
+};
+
 export {
   CompareProperties,
   CompareArrays,
@@ -1332,5 +1658,12 @@ export {
   MemoizedCompareArrays,
   MemoizedCompareValuesWithConflicts,
   MemoizedCompareValuesWithDetailedDifferences,
-  memoize
+  memoize,
+  TypeSafeCompareArrays,
+  mapObjectProperties,
+  TypeSafeCompareObjects,
+  TypeSafeCompareValuesWithDetailedDifferences,
+  ObjectsAreEqual,
+  IsSubset,
+  GetCommonStructure
 }; 

@@ -235,6 +235,253 @@ Will return: [
 */
 ```
 
+## Type-Safe Comparison Functions
+
+The library now offers enhanced type safety with the following features:
+
+- **TypeScript type guards** for better type inference
+- **Support for comparing objects with different but compatible types**
+- **Better type inference for comparison results**
+- **Detailed type information in comparison results**
+
+### `TypeSafeCompareArrays`
+
+This method compares two arrays and includes type information in the result.
+
+#### Parameters:
+- `firstArray` - First array to compare
+- `secondArray` - Second array to compare
+- `options` (optional) - Comparison options (same as `CompareArrays`)
+
+#### Returns:
+- `TypedComparisonResult<T, U>`: Object with:
+  - `isEqual`: Boolean indicating if arrays are equal
+  - `firstType`: Type of the first array
+  - `secondType`: Type of the second array
+
+#### Example:
+```ts
+const numbers = [1, 2, 3];
+const strings = ['1', '2', '3'];
+
+const result = TypeSafeCompareArrays(numbers, strings);
+console.log(result.isEqual); // false
+console.log(result.firstType); // 'array'
+console.log(result.secondType); // 'array'
+
+// With non-strict comparison (type coercion)
+const result2 = TypeSafeCompareArrays(numbers, strings, { strict: false });
+console.log(result2.isEqual); // true
+```
+
+### `TypeSafeCompareObjects`
+
+This method compares two objects and supports objects with different but compatible types.
+
+#### Parameters:
+- `firstObject` - First object to compare
+- `secondObject` - Second object to compare
+- `options` (optional) - Type-safe comparison options:
+  - All options from `ComparisonOptions`
+  - `propertyMapping`: Maps properties from the first object to equivalent properties in the second
+  - `includeTypeInfo`: Whether to include type information in the results (default: false)
+  - `customComparators`: Custom comparator functions for specific property paths
+
+#### Returns:
+- `TypedComparisonResult<T, U>`: Object with:
+  - `isEqual`: Boolean indicating if objects are equal
+  - `firstType`: Type of the first object
+  - `secondType`: Type of the second object
+
+#### Example:
+```ts
+interface User {
+  id: number;
+  name: string;
+  email: string;
+}
+
+interface Customer {
+  userId: number;
+  username: string;
+  userEmail: string;
+}
+
+const user: User = {
+  id: 1,
+  name: 'John Doe',
+  email: 'john@example.com'
+};
+
+const customer: Customer = {
+  userId: 1,
+  username: 'John Doe',
+  userEmail: 'john@example.com'
+};
+
+// Define property mapping
+const result = TypeSafeCompareObjects(user, customer, {
+  propertyMapping: {
+    id: 'userId',
+    name: 'username',
+    email: 'userEmail'
+  }
+});
+
+console.log(result.isEqual); // true
+```
+
+### `TypeSafeCompareValuesWithDetailedDifferences`
+
+This method performs a deep comparison of two objects and returns detailed differences with type information.
+
+#### Parameters:
+- `firstObject` - First object to compare
+- `secondObject` - Second object to compare
+- `options` (optional) - Type-safe comparison options (same as `TypeSafeCompareObjects`)
+
+#### Returns:
+- `TypedDetailedDifference[]`: Array of detailed differences with type information:
+  - All properties from `DetailedDifference`
+  - `oldValueType`: Type of the old value
+  - `newValueType`: Type of the new value
+
+#### Example:
+```ts
+const user = {
+  id: 1,
+  name: 'John Doe',
+  role: 'admin'
+};
+
+const customer = {
+  id: 1,
+  name: 'John Doe',
+  subscription: {
+    plan: 'premium',
+    active: true
+  }
+};
+
+const differences = TypeSafeCompareValuesWithDetailedDifferences(user, customer, {
+  includeTypeInfo: true
+});
+
+/* Result:
+[
+  {
+    path: 'role',
+    type: 'removed',
+    oldValue: 'admin',
+    oldValueType: 'string'
+  },
+  {
+    path: 'subscription',
+    type: 'added',
+    newValue: { plan: 'premium', active: true },
+    newValueType: 'object'
+  }
+]
+*/
+```
+
+### `ObjectsAreEqual`
+
+Type guard function that checks if two objects are equal and narrows types in conditional branches.
+
+#### Parameters:
+- `firstObject` - First object to compare
+- `secondObject` - Second object to compare
+- `options` (optional) - Comparison options (same as `ComparisonOptions`)
+
+#### Returns:
+- Type predicate indicating if the objects are equal (narrows type to intersection)
+
+#### Example:
+```ts
+interface User { id: number; name: string; role: string; }
+interface Customer { id: number; name: string; subscription: { plan: string; } }
+
+// Object that could be either type
+const someObject: User | Customer = getObject();
+
+if (ObjectsAreEqual(someObject, { id: 1, name: 'John', role: 'admin', subscription: { plan: 'premium' } })) {
+  // TypeScript now knows someObject has both User & Customer properties
+  console.log(someObject.role); // OK - TypeScript knows this exists
+  console.log(someObject.subscription.plan); // OK - TypeScript knows this exists
+}
+```
+
+### `IsSubset`
+
+Checks if the second object is a subset of the first object.
+
+#### Parameters:
+- `firstObject` - Object to check against
+- `secondObject` - Object that should be a subset
+- `options` (optional) - Comparison options (same as `ComparisonOptions`)
+
+#### Returns:
+- `boolean`: True if second object is a subset of first object
+
+#### Example:
+```ts
+const user = {
+  id: 1,
+  name: 'John Doe',
+  email: 'john@example.com',
+  role: 'admin'
+};
+
+const userSubset = {
+  id: 1,
+  name: 'John Doe'
+};
+
+console.log(IsSubset(user, userSubset)); // true
+console.log(IsSubset(userSubset, user)); // false
+```
+
+### `GetCommonStructure`
+
+Gets the common structure between two objects.
+
+#### Parameters:
+- `firstObject` - First object to compare
+- `secondObject` - Second object to compare
+
+#### Returns:
+- `Partial<CompatibleObject<T, U>>`: A new object containing only common properties
+
+#### Example:
+```ts
+const user = {
+  id: 1,
+  name: 'John Doe',
+  email: 'john@example.com',
+  role: 'admin'
+};
+
+const customer = {
+  id: 1,
+  name: 'John Doe',
+  email: 'john@example.com',
+  subscription: {
+    plan: 'premium'
+  }
+};
+
+const common = GetCommonStructure(user, customer);
+/*
+Result:
+{
+  id: 1,
+  name: 'John Doe',
+  email: 'john@example.com'
+}
+*/
+```
+
 ## Advanced Usage
 
 ### Handling Special Values
