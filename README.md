@@ -1026,7 +1026,7 @@ const result1 = MemoizedCompareValuesWithDetailedDifferences(obj1, obj2);
 const result2 = MemoizedCompareValuesWithDetailedDifferences(obj1, obj2);
 ```
 
-### Path Filtering
+## Path Filtering
 
 You can include or exclude specific properties from comparison using the `pathFilter` option.
 
