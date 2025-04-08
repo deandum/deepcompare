@@ -1090,45 +1090,6 @@ const { CompareArrays } = require('object-deep-compare');
 const isEqual = CompareArrays(array1, array2, options);
 ```
 
-### `Memoize` Utility
-A generic memoization utility function that can be used to memoize any function.
-
-#### Parameters:
-- `fn` - The function to memoize
-- `keyFn` (optional) - A custom function to generate cache keys for the arguments
-
-#### Returns:
-- A memoized version of the function that caches results based on input arguments
-
-#### Example:
-```ts
-const { Memoize } = require('object-deep-compare');
-// Or using ES modules: import { Memoize } from 'object-deep-compare';
-
-// Create a computationally expensive function
-const calculateFactorial = (n: number): number => {
-  if (n <= 1) return 1;
-  return n * calculateFactorial(n - 1);
-};
-
-// Create a memoized version of the function
-const memoizedFactorial = Memoize(calculateFactorial);
-
-console.time('first-call');
-const result1 = memoizedFactorial(20); // This will compute the result
-console.timeEnd('first-call'); // e.g., "first-call: 5.123ms"
-
-console.time('second-call');
-const result2 = memoizedFactorial(20); // This will return the cached result
-console.timeEnd('second-call'); // e.g., "second-call: 0.052ms" (much faster)
-
-// You can also provide a custom key generation function
-const customKeyMemoize = Memoize(
-  (a: object, b: object) => Object.assign({}, a, b),
-  (a, b) => JSON.stringify([Object.keys(a).sort(), Object.keys(b).sort()])
-);
-```
-
 ## Dependencies
 No runtime dependencies!
 
