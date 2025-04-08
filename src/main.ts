@@ -1,6 +1,16 @@
 import { ComparePropertiesResult, ComparisonOptions, DetailedDifference, DifferenceType } from './types';
 
 /**
+ * Error thrown when a circular reference is detected and handling is set to 'error'
+ */
+class CircularReferenceError extends Error {
+  constructor(path: string) {
+    super(`Circular reference detected at path: ${path}`);
+    this.name = 'CircularReferenceError';
+  }
+}
+
+/**
  * Helper function to check if an object has a property
  * @param obj - Object to check
  * @param key - Property to check for
@@ -145,6 +155,8 @@ const CompareProperties = <T extends Record<string, any>, U extends Record<strin
  * @param options - Comparison options
  * @param isArrayComparison - Whether this is an array comparison
  * @param detailed - Whether to return detailed difference information
+ * @param firstVisited - Map of already visited objects in the first object tree
+ * @param secondVisited - Map of already visited objects in the second object tree
  * @returns Array of conflict paths or detailed differences, or boolean indicating equality
  */
 const handleDepthComparison = (
@@ -153,9 +165,11 @@ const handleDepthComparison = (
   currentPath: string,
   options: ComparisonOptions,
   isArrayComparison: boolean,
-  detailed: boolean = false
+  detailed: boolean = false,
+  firstVisited: Map<any, string> = new Map(),
+  secondVisited: Map<any, string> = new Map()
 ): string[] | DetailedDifference[] | boolean => {
-  const { strict = true } = options;
+  const { strict = true, circularReferences = 'error' } = options;
 
   // Handle Date objects specially
   if (firstValue instanceof Date && secondValue instanceof Date) {
@@ -187,8 +201,39 @@ const handleDepthComparison = (
       : [currentPath];
   }
 
-  // Handle arrays
+  // Check for circular references in arrays
   if (Array.isArray(firstValue) && Array.isArray(secondValue)) {
+    // Check if either array has been visited before
+    const firstVisitedPath = firstVisited.get(firstValue);
+    const secondVisitedPath = secondVisited.get(secondValue);
+    
+    if (firstVisitedPath !== undefined || secondVisitedPath !== undefined) {
+      // If handling is set to error, throw an error
+      if (circularReferences === 'error') {
+        throw new CircularReferenceError(currentPath);
+      }
+      
+      // If both arrays have been visited before and they reference the same relative position in their structures
+      if (firstVisitedPath !== undefined && secondVisitedPath !== undefined) {
+        // If both paths are the same, consider them equal
+        return true;
+      }
+      
+      // If only one has been visited or they're at different positions, consider them different
+      return detailed 
+        ? [{ 
+            path: currentPath, 
+            type: 'changed',
+            oldValue: firstValue,
+            newValue: secondValue
+          } as DetailedDifference] 
+        : [currentPath];
+    }
+    
+    // Mark arrays as visited before going deeper
+    firstVisited.set(firstValue, currentPath);
+    secondVisited.set(secondValue, currentPath);
+
     if (firstValue.length !== secondValue.length) {
       return isArrayComparison 
         ? false 
@@ -214,56 +259,82 @@ const handleDepthComparison = (
       // Compare array elements
       if (isObject(firstValue[i]) && isObject(secondValue[i])) {
         // Recursively compare objects within arrays
-        const result = handleDepthComparison(
-          firstValue[i],
-          secondValue[i],
-          elemPath,
-          options,
-          false,
-          detailed
-        );
-        
-        if (result !== true) {
-          hasConflict = true;
-          if (Array.isArray(result)) {
-            if (detailed) {
-              (conflicts as DetailedDifference[]).push(...(result as DetailedDifference[]));
-            } else {
-              (conflicts as string[]).push(...(result as string[]));
+        try {
+          const result = handleDepthComparison(
+            firstValue[i],
+            secondValue[i],
+            elemPath,
+            options,
+            false,
+            detailed,
+            new Map(firstVisited),  // Create a new map to avoid shared references
+            new Map(secondVisited)  // Create a new map to avoid shared references
+          );
+          
+          if (result !== true) {
+            hasConflict = true;
+            if (Array.isArray(result)) {
+              if (detailed) {
+                (conflicts as DetailedDifference[]).push(...(result as DetailedDifference[]));
+              } else {
+                (conflicts as string[]).push(...(result as string[]));
+              }
             }
+          }
+        } catch (error) {
+          if (error instanceof CircularReferenceError) {
+            if (circularReferences === 'error') {
+              throw error;
+            }
+            // If circularReferences is 'ignore', continue with next comparison
+          } else {
+            throw error;
           }
         }
       } else if (Array.isArray(firstValue[i]) && Array.isArray(secondValue[i])) {
         // Recursively compare nested arrays
-        const result = handleDepthComparison(
-          firstValue[i],
-          secondValue[i],
-          elemPath,
-          options,
-          true,
-          detailed
-        );
-        
-        if (result !== true) {
-          hasConflict = true;
-          if (Array.isArray(result)) {
-            if (detailed) {
-              (conflicts as DetailedDifference[]).push(...(result as DetailedDifference[]));
-            } else {
-              (conflicts as string[]).push(...(result as string[]));
+        try {
+          const result = handleDepthComparison(
+            firstValue[i],
+            secondValue[i],
+            elemPath,
+            options,
+            true,
+            detailed,
+            new Map(firstVisited),  // Create a new map to avoid shared references
+            new Map(secondVisited)  // Create a new map to avoid shared references
+          );
+          
+          if (result !== true) {
+            hasConflict = true;
+            if (Array.isArray(result)) {
+              if (detailed) {
+                (conflicts as DetailedDifference[]).push(...(result as DetailedDifference[]));
+              } else {
+                (conflicts as string[]).push(...(result as string[]));
+              }
+            } else if (result === false) {
+              // For arrays compared directly
+              if (detailed) {
+                (conflicts as DetailedDifference[]).push({
+                  path: elemPath,
+                  type: 'changed',
+                  oldValue: firstValue[i],
+                  newValue: secondValue[i]
+                });
+              } else {
+                (conflicts as string[]).push(elemPath);
+              }
             }
-          } else if (result === false) {
-            // For arrays compared directly
-            if (detailed) {
-              (conflicts as DetailedDifference[]).push({
-                path: elemPath,
-                type: 'changed',
-                oldValue: firstValue[i],
-                newValue: secondValue[i]
-              });
-            } else {
-              (conflicts as string[]).push(elemPath);
+          }
+        } catch (error) {
+          if (error instanceof CircularReferenceError) {
+            if (circularReferences === 'error') {
+              throw error;
             }
+            // If circularReferences is 'ignore', continue with next comparison
+          } else {
+            throw error;
           }
         }
       } else if (!areValuesEqual(firstValue[i], secondValue[i], strict)) {
@@ -291,10 +362,41 @@ const handleDepthComparison = (
 
   // Handle objects
   if (isObject(firstValue) && isObject(secondValue)) {
+    // Check if either object has been visited before
+    const firstVisitedPath = firstVisited.get(firstValue);
+    const secondVisitedPath = secondVisited.get(secondValue);
+    
+    if (firstVisitedPath !== undefined || secondVisitedPath !== undefined) {
+      // If handling is set to error, throw an error
+      if (circularReferences === 'error') {
+        throw new CircularReferenceError(currentPath);
+      }
+      
+      // If both objects have been visited before and they reference the same relative position in their structures
+      if (firstVisitedPath !== undefined && secondVisitedPath !== undefined) {
+        // If both paths are the same, consider them equal
+        return true;
+      }
+      
+      // If only one has been visited or they're at different positions, consider them different
+      return detailed 
+        ? [{ 
+            path: currentPath, 
+            type: 'changed',
+            oldValue: firstValue,
+            newValue: secondValue
+          } as DetailedDifference] 
+        : [currentPath];
+    }
+    
+    // Mark objects as visited before going deeper
+    firstVisited.set(firstValue, currentPath);
+    secondVisited.set(secondValue, currentPath);
+
     const allKeys = new Set([...Object.keys(firstValue), ...Object.keys(secondValue)]);
     const conflicts = detailed ? [] as DetailedDifference[] : [] as string[];
     
-    allKeys.forEach(key => {
+    for (const key of allKeys) {
       const hasFirst = hasOwn(firstValue, key);
       const hasSecond = hasOwn(secondValue, key);
       const propPath = currentPath ? `${currentPath}.${key}` : key;
@@ -312,31 +414,54 @@ const handleDepthComparison = (
         } else {
           (conflicts as string[]).push(propPath);
         }
-        return;
+        continue;
       }
       
       // Both objects have the key, compare their values
-      const result = handleDepthComparison(
-        firstValue[key],
-        secondValue[key],
-        propPath,
-        options,
-        false,
-        detailed
-      );
-      
-      if (result !== true) {
-        if (Array.isArray(result)) {
-          if (detailed) {
-            (conflicts as DetailedDifference[]).push(...(result as DetailedDifference[]));
-          } else {
-            (conflicts as string[]).push(...(result as string[]));
+      try {
+        const result = handleDepthComparison(
+          firstValue[key],
+          secondValue[key],
+          propPath,
+          options,
+          false,
+          detailed,
+          new Map(firstVisited),  // Create a new map to avoid shared references
+          new Map(secondVisited)  // Create a new map to avoid shared references
+        );
+        
+        if (result !== true) {
+          if (Array.isArray(result)) {
+            if (detailed) {
+              (conflicts as DetailedDifference[]).push(...(result as DetailedDifference[]));
+            } else {
+              (conflicts as string[]).push(...(result as string[]));
+            }
+          } else if (typeof result === 'string') {
+            (conflicts as string[]).push(result);
           }
-        } else if (typeof result === 'string') {
-          (conflicts as string[]).push(result);
+        }
+      } catch (error) {
+        if (error instanceof CircularReferenceError) {
+          if (circularReferences === 'error') {
+            throw error;
+          }
+          // If circularReferences is 'ignore', just mark this property as different
+          if (detailed) {
+            (conflicts as DetailedDifference[]).push({
+              path: propPath,
+              type: 'changed',
+              oldValue: firstValue[key],
+              newValue: secondValue[key]
+            });
+          } else {
+            (conflicts as string[]).push(propPath);
+          }
+        } else {
+          throw error;
         }
       }
-    });
+    }
     
     return conflicts.length > 0 ? conflicts : true;
   }
@@ -374,8 +499,43 @@ const CompareArrays = (
     return false;
   }
 
-  // Use the unified depth handling function
-  return handleDepthComparison(firstArray, secondArray, '', options, true, false) === true;
+  // Extract options
+  const { circularReferences = 'error' } = options;
+
+  // If the arrays are the same object, they're equal
+  if (firstArray === secondArray) {
+    return true;
+  }
+
+  // Check for obvious circular references in the top-level arrays
+  if (circularReferences === 'error') {
+    // Create a simple check for the most direct circular reference cases
+    for (let i = 0; i < firstArray.length; i++) {
+      if (firstArray[i] === firstArray) {
+        throw new CircularReferenceError(`[${i}]`);
+      }
+    }
+    
+    for (let i = 0; i < secondArray.length; i++) {
+      if (secondArray[i] === secondArray) {
+        throw new CircularReferenceError(`[${i}]`);
+      }
+    }
+  }
+
+  try {
+    // Use the unified depth handling function
+    return handleDepthComparison(firstArray, secondArray, '', options, true, false) === true;
+  } catch (error) {
+    if (error instanceof CircularReferenceError) {
+      if (circularReferences === 'error') {
+        throw error;
+      }
+      // If circularReferences is 'ignore' and we're still throwing, something went wrong
+      return false;
+    }
+    throw error;
+  }
 };
 
 /**
@@ -394,31 +554,66 @@ const CompareValuesWithConflicts = <T extends Record<string, any>, U extends Rec
   pathOfConflict: string = '',
   options: ComparisonOptions = {}
 ): string[] => {
-  // Use the unified depth handling function
-  const conflicts = handleDepthComparison(firstObject, secondObject, pathOfConflict, options, false, false);
-  
-  if (!Array.isArray(conflicts)) {
+  // Extract options
+  const { circularReferences = 'error' } = options;
+
+  // If the objects are the same reference, there are no conflicts
+  if (Object.is(firstObject, secondObject)) {
     return [];
   }
-  
-  // Type assertion because we know the conflicts will be strings due to detailed=false parameter
-  const stringConflicts = conflicts as string[];
-  
-  // Post-process the conflicts to maintain backward compatibility
-  // This ensures arrays are reported at their parent level only
-  const processedConflicts = new Set<string>();
-  
-  for (const conflict of stringConflicts) {
-    // If this is an array element conflict (contains [), get the array path
-    if (conflict.includes('[')) {
-      const arrayPath = conflict.substring(0, conflict.indexOf('['));
-      processedConflicts.add(arrayPath);
-    } else {
-      processedConflicts.add(conflict);
+
+  // Check for obvious circular references in the top-level objects
+  if (circularReferences === 'error') {
+    // Look for direct self-references in both objects
+    for (const key in firstObject) {
+      if (firstObject[key] === firstObject) {
+        throw new CircularReferenceError(key);
+      }
+    }
+    
+    for (const key in secondObject) {
+      if (secondObject[key] === secondObject) {
+        throw new CircularReferenceError(key);
+      }
     }
   }
-  
-  return Array.from(processedConflicts);
+
+  try {
+    // Use the unified depth handling function
+    const conflicts = handleDepthComparison(firstObject, secondObject, pathOfConflict, options, false, false);
+    
+    if (!Array.isArray(conflicts)) {
+      return [];
+    }
+    
+    // Type assertion because we know the conflicts will be strings due to detailed=false parameter
+    const stringConflicts = conflicts as string[];
+    
+    // Post-process the conflicts to maintain backward compatibility
+    // This ensures arrays are reported at their parent level only
+    const processedConflicts = new Set<string>();
+    
+    for (const conflict of stringConflicts) {
+      // If this is an array element conflict (contains [), get the array path
+      if (conflict.includes('[')) {
+        const arrayPath = conflict.substring(0, conflict.indexOf('['));
+        processedConflicts.add(arrayPath);
+      } else {
+        processedConflicts.add(conflict);
+      }
+    }
+    
+    return Array.from(processedConflicts);
+  } catch (error) {
+    if (error instanceof CircularReferenceError) {
+      if (circularReferences === 'error') {
+        throw error;
+      }
+      // If circularReferences is 'ignore' and we're getting an error, return empty array
+      return [];
+    }
+    throw error;
+  }
 };
 
 /**
@@ -437,9 +632,44 @@ const CompareValuesWithDetailedDifferences = <T extends Record<string, any>, U e
   pathOfConflict: string = '',
   options: ComparisonOptions = {}
 ): DetailedDifference[] => {
-  // Use the unified depth handling function with detailed flag
-  const conflicts = handleDepthComparison(firstObject, secondObject, pathOfConflict, options, false, true);
-  return Array.isArray(conflicts) ? conflicts as DetailedDifference[] : [];
+  // Extract options
+  const { circularReferences = 'error' } = options;
+
+  // If the objects are the same reference, there are no differences
+  if (Object.is(firstObject, secondObject)) {
+    return [];
+  }
+
+  // Check for obvious circular references in the top-level objects
+  if (circularReferences === 'error') {
+    // Look for direct self-references in both objects
+    for (const key in firstObject) {
+      if (firstObject[key] === firstObject) {
+        throw new CircularReferenceError(key);
+      }
+    }
+    
+    for (const key in secondObject) {
+      if (secondObject[key] === secondObject) {
+        throw new CircularReferenceError(key);
+      }
+    }
+  }
+
+  try {
+    // Use the unified depth handling function with detailed flag
+    const conflicts = handleDepthComparison(firstObject, secondObject, pathOfConflict, options, false, true);
+    return Array.isArray(conflicts) ? conflicts as DetailedDifference[] : [];
+  } catch (error) {
+    if (error instanceof CircularReferenceError) {
+      if (circularReferences === 'error') {
+        throw error;
+      }
+      // If circularReferences is 'ignore' and we're getting an error, return empty array
+      return [];
+    }
+    throw error;
+  }
 };
 
 /**
@@ -498,11 +728,18 @@ const compareValuesWithConflictsKeyFn = <T extends Record<string, any>, U extend
   options: ComparisonOptions = {}
 ): string => {
   // Include path and options in the cache key
+  // Note: We stringify only specific options to avoid circular reference issues in the key generation itself
+  const safeOptions = {
+    strict: options.strict,
+    circularReferences: options.circularReferences
+  };
+  
+  // For cache key, we use object IDs instead of full objects to avoid circular references
   return JSON.stringify([
-    firstObject,
-    secondObject,
+    Object.keys(firstObject).sort().join(','),
+    Object.keys(secondObject).sort().join(','),
     pathOfConflict,
-    options
+    safeOptions
   ]);
 };
 
@@ -516,11 +753,18 @@ const compareValuesWithDetailedDifferencesKeyFn = <T extends Record<string, any>
   options: ComparisonOptions = {}
 ): string => {
   // Include path and options in the cache key
+  // Note: We stringify only specific options to avoid circular reference issues in the key generation itself
+  const safeOptions = {
+    strict: options.strict,
+    circularReferences: options.circularReferences
+  };
+  
+  // For cache key, we use object IDs instead of full objects to avoid circular references
   return JSON.stringify([
-    firstObject,
-    secondObject,
+    Object.keys(firstObject).sort().join(','),
+    Object.keys(secondObject).sort().join(','),
     pathOfConflict,
-    options
+    safeOptions
   ]);
 };
 

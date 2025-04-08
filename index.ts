@@ -1,5 +1,5 @@
 import * as objectDeepCompare from './src/main';
-import { ComparisonOptions, DetailedDifference } from './src/types';
+import { ComparisonOptions, DetailedDifference, CircularReferenceHandling } from './src/types';
 
 /**
  * Compares the properties of two objects and returns their differences and commonalities
@@ -22,7 +22,7 @@ const CompareProperties = <T extends Record<string, any>, U extends Record<strin
  * 
  * @param firstArray - First array to compare
  * @param secondArray - Second array to compare
- * @param options - Optional comparison options (strict)
+ * @param options - Optional comparison options (strict, circularReferences)
  * @returns Boolean indicating if arrays are equal
  */
 const CompareArrays = (
@@ -39,7 +39,7 @@ const CompareArrays = (
  * @param firstObject - First object to compare
  * @param secondObject - Second object to compare
  * @param pathOfConflict - Starting path for conflict (optional)
- * @param options - Optional comparison options (strict)
+ * @param options - Optional comparison options (strict, circularReferences)
  * @returns Array of conflict paths or null if inputs are invalid
  */
 const CompareValuesWithConflicts = <T extends Record<string, any>, U extends Record<string, any>>(
@@ -65,7 +65,7 @@ const CompareValuesWithConflicts = <T extends Record<string, any>, U extends Rec
  * @param firstObject - First object to compare
  * @param secondObject - Second object to compare
  * @param pathOfConflict - Starting path for conflict (optional)
- * @param options - Optional comparison options (strict)
+ * @param options - Optional comparison options (strict, circularReferences)
  * @returns Array of detailed differences or null if inputs are invalid
  */
 const CompareValuesWithDetailedDifferences = <T extends Record<string, any>, U extends Record<string, any>>(
@@ -89,5 +89,7 @@ export {
   CompareArrays,
   CompareValuesWithConflicts,
   CompareValuesWithDetailedDifferences,
-  DetailedDifference
+  DetailedDifference,
+  ComparisonOptions,
+  CircularReferenceHandling
 }; 

@@ -1,6 +1,6 @@
 # object-deep-compare
 
-[![npm version](https://img.shields.io/badge/npm-v2.1.0-blue)](https://www.npmjs.com/package/object-deep-compare)
+[![npm version](https://img.shields.io/badge/npm-v2.2.0-blue)](https://www.npmjs.com/package/object-deep-compare)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/)
 [![Zero Dependencies](https://img.shields.io/badge/Zero-Dependencies-green.svg)](https://www.npmjs.com/package/object-deep-compare)
@@ -15,6 +15,7 @@ A type-safe collection of comparison methods for objects and arrays in TypeScrip
 - **Special value support**: Correctly handles comparison of special values like `NaN`, `null`, and `undefined`
 - **Date object support**: Properly compares Date objects based on their time values
 - **RegExp support**: Correctly compares RegExp objects
+- **Circular reference detection**: Can detect and handle circular references in objects and arrays
 - **Performance optimized**: Efficient algorithms to minimize processing time
 - **Configurable**: Control comparison behavior through options
 - **Detailed difference reporting**: Get detailed information about each difference including type and actual values
@@ -44,7 +45,9 @@ import {
   CompareProperties, 
   CompareArrays, 
   CompareValuesWithConflicts,
-  CompareValuesWithDetailedDifferences 
+  CompareValuesWithDetailedDifferences,
+  ComparisonOptions,
+  CircularReferenceHandling
 } from 'object-deep-compare';
 ```
 
@@ -91,6 +94,7 @@ This method compares two arrays for equality. It returns true or false.
 - `secondArray` - Second array to compare
 - `options` (optional) - Comparison options
   - `strict` - Whether to use strict equality (===) for comparing values (default: true)
+  - `circularReferences` - How to handle circular references: 'error' or 'ignore' (default: 'error')
 
 #### Returns:
 - `boolean`: true if arrays are equal, false otherwise
@@ -124,6 +128,7 @@ This method performs a deep comparison of two objects and returns an array of pa
 - `pathOfConflict` (optional) - Starting path for conflict (default: '')
 - `options` (optional) - Comparison options
   - `strict` - Whether to use strict equality (===) for comparing values (default: true)
+  - `circularReferences` - How to handle circular references: 'error' or 'ignore' (default: 'error')
 
 #### Returns:
 - `string[]`: Array of paths to properties that differ between the objects
@@ -171,6 +176,7 @@ This method performs a deep comparison of two objects and returns detailed infor
 - `pathOfConflict` (optional) - Starting path for conflict (default: '')
 - `options` (optional) - Comparison options
   - `strict` - Whether to use strict equality (===) for comparing values (default: true)
+  - `circularReferences` - How to handle circular references: 'error' or 'ignore' (default: 'error')
 
 #### Returns:
 - `DetailedDifference[]`: Array of detailed difference objects, where each object includes:
@@ -268,6 +274,38 @@ console.log(isEqual); // true
 
 const isNotEqual = objectDeepCompare.CompareArrays(regex1, regex3);
 console.log(isNotEqual); // false
+```
+
+### Handling Circular References
+
+The library can detect and handle circular references in objects and arrays:
+
+```ts
+// Create objects with circular references
+const obj1 = { a: 1, b: 2 };
+obj1.self = obj1; // Self-reference
+
+const obj2 = { a: 1, b: 2 };
+obj2.self = obj2; // Self-reference
+
+// By default, circular references will throw an error
+try {
+  const diffs = objectDeepCompare.CompareValuesWithDetailedDifferences(obj1, obj2);
+} catch (error) {
+  console.log(error.message); // "Circular reference detected at path: self"
+}
+
+// Use the circularReferences option to handle circular references gracefully
+const options = { circularReferences: 'ignore' };
+const diffs = objectDeepCompare.CompareValuesWithDetailedDifferences(obj1, obj2, '', options);
+console.log(diffs); // [] (empty array, objects are equal)
+
+// Objects with the same structure but different values will still show differences
+const obj3 = { a: 1, b: 3 }; // Different value for b
+obj3.self = obj3;
+
+const diffResults = objectDeepCompare.CompareValuesWithDetailedDifferences(obj1, obj3, '', options);
+console.log(diffResults[0].path); // "b"
 ```
 
 ## Memoized Functions

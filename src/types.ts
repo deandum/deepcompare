@@ -7,6 +7,11 @@ export interface ComparePropertiesResult {
 }
 
 /**
+ * Type for circular reference handling strategy
+ */
+export type CircularReferenceHandling = 'error' | 'ignore';
+
+/**
  * Comparison options that can be passed to comparison functions
  */
 export interface ComparisonOptions {
@@ -15,6 +20,14 @@ export interface ComparisonOptions {
    * @default true
    */
   strict?: boolean;
+
+  /**
+   * How to handle circular references in objects
+   * - 'error': throw an error when a circular reference is detected
+   * - 'ignore': treat circular references as equal if they refer to the same ancestor
+   * @default 'error'
+   */
+  circularReferences?: CircularReferenceHandling;
 }
 
 /**

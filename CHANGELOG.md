@@ -2,6 +2,18 @@
 
 All notable changes to the object-deep-compare project will be documented in this file.
 
+## [2.2.0] - 2024-04-08
+
+### Added
+- **Circular Reference Detection**:
+  - New `circularReferences` option in ComparisonOptions to handle circular references
+  - Two handling strategies: 'error' (default) to throw a CircularReferenceError or 'ignore' to treat circular references as equal
+  - Added tracking of object references during comparison to detect cycles
+  - Added CircularReferenceHandling type to specify handling strategy
+  - New tests for circular reference detection and handling
+- **Enhanced error handling** for all comparison functions to properly handle circular reference errors
+- **Updated documentation** with examples for the new circular reference detection feature
+
 ## [2.1.0] - 2024-04-08
 
 ### Added
