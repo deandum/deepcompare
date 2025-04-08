@@ -12,6 +12,32 @@ export interface ComparePropertiesResult {
 export type CircularReferenceHandling = 'error' | 'ignore';
 
 /**
+ * Type for path filter mode 
+ */
+export type PathFilterMode = 'include' | 'exclude';
+
+/**
+ * Interface for path filter configuration
+ */
+export interface PathFilter {
+  /**
+   * Array of path patterns to include or exclude
+   * - Supports exact paths (e.g., 'user.name')
+   * - Supports wildcard paths with leading dot (e.g., '.id' matches any property named 'id' at any level)
+   * - Supports wildcards with * (e.g., 'user.*.created' matches 'user.profile.created', 'user.settings.created', etc.)
+   */
+  patterns: string[];
+  
+  /**
+   * Whether to include or exclude the specified paths
+   * - 'include': Only compare paths that match the patterns
+   * - 'exclude': Compare all paths except those that match the patterns
+   * @default 'exclude'
+   */
+  mode?: PathFilterMode;
+}
+
+/**
  * Comparison options that can be passed to comparison functions
  */
 export interface ComparisonOptions {
@@ -28,6 +54,12 @@ export interface ComparisonOptions {
    * @default 'error'
    */
   circularReferences?: CircularReferenceHandling;
+
+  /**
+   * Path filter configuration to specify which properties to compare or ignore
+   * This allows filtering properties based on path patterns
+   */
+  pathFilter?: PathFilter;
 }
 
 /**

@@ -16,6 +16,7 @@ A type-safe collection of comparison methods for objects and arrays in TypeScrip
 - **Date object support**: Properly compares Date objects based on their time values
 - **RegExp support**: Correctly compares RegExp objects
 - **Circular reference detection**: Can detect and handle circular references in objects and arrays
+- **Path filtering**: Ability to include or exclude specific properties from comparison using wildcard patterns
 - **Performance optimized**: Efficient algorithms to minimize processing time
 - **Configurable**: Control comparison behavior through options
 - **Detailed difference reporting**: Get detailed information about each difference including type and actual values
@@ -47,7 +48,9 @@ import {
   CompareValuesWithConflicts,
   CompareValuesWithDetailedDifferences,
   ComparisonOptions,
-  CircularReferenceHandling
+  CircularReferenceHandling,
+  PathFilter,
+  PathFilterMode
 } from 'object-deep-compare';
 ```
 
@@ -95,6 +98,7 @@ This method compares two arrays for equality. It returns true or false.
 - `options` (optional) - Comparison options
   - `strict` - Whether to use strict equality (===) for comparing values (default: true)
   - `circularReferences` - How to handle circular references: 'error' or 'ignore' (default: 'error')
+  - `pathFilter` - Configuration to include or exclude properties based on path patterns
 
 #### Returns:
 - `boolean`: true if arrays are equal, false otherwise
@@ -129,6 +133,7 @@ This method performs a deep comparison of two objects and returns an array of pa
 - `options` (optional) - Comparison options
   - `strict` - Whether to use strict equality (===) for comparing values (default: true)
   - `circularReferences` - How to handle circular references: 'error' or 'ignore' (default: 'error')
+  - `pathFilter` - Configuration to include or exclude properties based on path patterns
 
 #### Returns:
 - `string[]`: Array of paths to properties that differ between the objects
@@ -177,6 +182,7 @@ This method performs a deep comparison of two objects and returns detailed infor
 - `options` (optional) - Comparison options
   - `strict` - Whether to use strict equality (===) for comparing values (default: true)
   - `circularReferences` - How to handle circular references: 'error' or 'ignore' (default: 'error')
+  - `pathFilter` - Configuration to include or exclude properties based on path patterns
 
 #### Returns:
 - `DetailedDifference[]`: Array of detailed difference objects, where each object includes:
@@ -378,3 +384,60 @@ No runtime dependencies!
 
 ## License
 MIT © Dean Dumitru
+
+## Configuration Options
+
+### Path Filtering
+
+You can include or exclude specific properties from comparison using the `pathFilter` option.
+
+#### PathFilter interface:
+```ts
+interface PathFilter {
+  patterns: string[];  // Array of path patterns to match
+  mode?: 'include' | 'exclude';  // Whether to include or exclude matched paths (default: 'exclude')
+}
+```
+
+#### Path pattern types:
+- **Exact paths**: Match a specific property path (e.g., `'user.name'`)
+- **Leading dot paths**: Match any property with the specified name at any level (e.g., `'.timestamp'` matches `'timestamp'`, `'user.timestamp'`, `'logs.entry.timestamp'`, etc.)
+- **Wildcard paths**: Use `*` to match any property name in a path (e.g., `'user.*.created'` matches `'user.profile.created'`, `'user.settings.created'`, etc.)
+
+#### Examples:
+
+Ignore all timestamp properties:
+```ts
+const options = {
+  pathFilter: {
+    patterns: ['.timestamp', '.createdAt', '.updatedAt'],
+    mode: 'exclude'  // This is the default mode
+  }
+};
+
+const differences = CompareValuesWithConflicts(obj1, obj2, '', options);
+```
+
+Only compare specific fields:
+```ts
+const options = {
+  pathFilter: {
+    patterns: ['user.name', 'user.email', 'settings.*'],
+    mode: 'include'
+  }
+};
+
+const differences = CompareValuesWithDetailedDifferences(obj1, obj2, '', options);
+```
+
+Compare everything except auto-generated IDs:
+```ts
+const options = {
+  pathFilter: {
+    patterns: ['.id', '.uuid', '*.id'],
+    mode: 'exclude'
+  }
+};
+
+const isEqual = CompareArrays(array1, array2, options);
+```

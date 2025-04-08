@@ -1,4 +1,4 @@
-import { ComparePropertiesResult, ComparisonOptions, DetailedDifference, DifferenceType } from './types';
+import { ComparePropertiesResult, ComparisonOptions, DetailedDifference, DifferenceType, PathFilter, PathFilterMode } from './types';
 
 /**
  * Error thrown when a circular reference is detected and handling is set to 'error'
@@ -148,6 +148,247 @@ const CompareProperties = <T extends Record<string, any>, U extends Record<strin
 };
 
 /**
+ * Checks if a given path matches any of the provided patterns
+ * Supports wildcard patterns:
+ * - '.fieldName' matches any property named 'fieldName' at any level
+ * - 'parent.*.child' matches any path like 'parent.something.child'
+ * - 'parent[*].child' matches any array index like 'parent[0].child'
+ * 
+ * @param path - The property path to check
+ * @param patterns - Array of patterns to match against
+ * @returns Whether the path matches any of the patterns
+ */
+const matchesPathPattern = (path: string, patterns: string[]): boolean => {
+  if (!patterns || patterns.length === 0) {
+    return false;
+  }
+
+  for (const pattern of patterns) {
+    // Handle leading dot for any level match
+    if (pattern.startsWith('.')) {
+      const fieldName = pattern.substring(1);
+      // Check if path equals the field name, ends with the field name, or contains it as a property name
+      if (path === fieldName || 
+          path.endsWith(`.${fieldName}`) || 
+          path.includes(`${fieldName}.`) ||
+          path.match(new RegExp(`\\[\\d+\\]\\.${fieldName}`)) ||  // Match pattern[0].fieldName
+          path.match(new RegExp(`\\.${fieldName}\\[`))) {         // Match pattern.fieldName[
+        return true;
+      }
+      continue;
+    }
+
+    // Handle exact match
+    if (pattern === path) {
+      return true;
+    }
+    
+    // Match array index patterns
+    if (pattern.includes('[*]')) {
+      const arrayPattern = pattern.replace(/\[\*\]/g, '\\[\\d+\\]');
+      const regexPattern = '^' + arrayPattern.replace(/\./g, '\\.') + '$';
+      try {
+        const regex = new RegExp(regexPattern);
+        if (regex.test(path)) {
+          return true;
+        }
+      } catch (e) {
+        // If regex fails, fall back to exact match
+      }
+    }
+    
+    // Match wildcard patterns
+    if (pattern.includes('*')) {
+      // Convert pattern to regex
+      const regexPattern = '^' + pattern
+        .replace(/\./g, '\\.')
+        .replace(/\[/g, '\\[')
+        .replace(/\]/g, '\\]')
+        .replace(/\*/g, '[^.\\[\\]]*') + '$';
+      
+      try {
+        const regex = new RegExp(regexPattern);
+        if (regex.test(path)) {
+          return true;
+        }
+      } catch (e) {
+        // If regex fails, fall back to exact match
+      }
+    }
+
+    // Check for parent paths in array cases
+    // If the pattern is 'posts' and the path is 'posts[0].title', it should match
+    if (path.startsWith(pattern + '[') || path.startsWith(pattern + '.')) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+/**
+ * Determine if a path or any of its parent paths should be filtered out
+ * This helps handle structured data like arrays where we might want to filter
+ * at the parent level
+ * 
+ * @param path - The property path to check
+ * @param pathFilter - Path filter configuration
+ * @returns Whether the path should be filtered
+ */
+const shouldFilterPath = (path: string, pathFilter?: PathFilter): boolean => {
+  if (!pathFilter || !pathFilter.patterns || pathFilter.patterns.length === 0) {
+    return false; // If no filter is defined, nothing is filtered
+  }
+
+  // Check if the path itself matches any pattern
+  if (matchesPathPattern(path, pathFilter.patterns)) {
+    return true;
+  }
+
+  // Check for parent paths in case of arrays
+  // For example, if filtering 'posts.*.title', we should also filter 'posts'
+  // This is needed because arrays report conflicts at the parent level
+  const parts = path.split('.');
+  let currentPath = '';
+
+  for (const part of parts) {
+    // Handle array notation in path segments
+    const arrayMatch = part.match(/^([^\[]+)(\[\d+\])(.*)$/);
+    if (arrayMatch) {
+      const beforeBracket = arrayMatch[1];
+      const bracketPart = arrayMatch[2];
+      const afterBracket = arrayMatch[3];
+      
+      // Build the path up to this segment
+      if (currentPath) {
+        currentPath += '.';
+      }
+      currentPath += beforeBracket;
+      
+      // Check if this array path matches any pattern
+      if (matchesPathPattern(currentPath, pathFilter.patterns)) {
+        return true;
+      }
+      
+      // Include the bracket part and continue
+      currentPath += bracketPart;
+      
+      if (afterBracket) {
+        currentPath += afterBracket;
+      }
+    } else {
+      // Handle normal path segments
+      if (currentPath) {
+        currentPath += '.';
+      }
+      currentPath += part;
+      
+      // Check if this path matches any pattern
+      if (matchesPathPattern(currentPath, pathFilter.patterns)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+};
+
+/**
+ * Determines if a path should be compared based on the pathFilter configuration
+ * 
+ * @param path - The property path to check
+ * @param pathFilter - Path filter configuration
+ * @returns Whether the path should be compared
+ */
+const shouldComparePath = (path: string, pathFilter?: PathFilter): boolean => {
+  if (!pathFilter || !pathFilter.patterns || pathFilter.patterns.length === 0) {
+    return true; // If no filter is defined, compare all paths
+  }
+
+  const mode = pathFilter.mode || 'exclude';
+  
+  // If we're in exclude mode, check if the path matches any pattern
+  if (mode === 'exclude') {
+    return !shouldFilterPath(path, pathFilter);
+  }
+  
+  // For include mode, we need more flexible matching
+  
+  // Direct match - check if the path exactly matches any pattern
+  if (pathFilter.patterns.includes(path)) {
+    return true;
+  }
+  
+  // Check if path matches any pattern
+  if (shouldFilterPath(path, pathFilter)) {
+    return true;
+  }
+  
+  // Handle array notation specially
+  if (path.includes('[')) {
+    // Convert array indices to wildcards for matching
+    const wildcardPath = path.replace(/\[\d+\]/g, '[*]');
+    if (pathFilter.patterns.includes(wildcardPath)) {
+      return true;
+    }
+    
+    // Check array element direct match
+    // e.g., if pattern is '[*].content', path could be '[0].content'
+    for (const pattern of pathFilter.patterns) {
+      if (pattern.startsWith('[*]') && path.match(/^\[\d+\]/)) {
+        const patternSuffix = pattern.substring(3); // Remove '[*]'
+        const pathSuffix = path.replace(/^\[\d+\]/, ''); // Remove '[0]'
+        if (patternSuffix === pathSuffix) {
+          return true;
+        }
+      }
+    }
+  }
+  
+  // Check parent paths for include patterns
+  // e.g., if pattern is 'settings.*', we should include 'settings.theme'
+  const parts = path.split('.');
+  let currentPath = '';
+  
+  for (let i = 0; i < parts.length; i++) {
+    if (i > 0) {
+      currentPath += '.';
+    }
+    currentPath += parts[i];
+    
+    // Check if the current path segment followed by wildcard is in patterns
+    const wildcardPattern = `${currentPath}.*`;
+    if (pathFilter.patterns.includes(wildcardPattern)) {
+      return true;
+    }
+    
+    // Also check for other wildcard patterns
+    for (const pattern of pathFilter.patterns) {
+      if (pattern.includes('*') && !pattern.startsWith('.')) {
+        // Convert pattern to regex
+        const regexPattern = pattern
+          .replace(/\./g, '\\.')
+          .replace(/\[/g, '\\[')
+          .replace(/\]/g, '\\]')
+          .replace(/\*/g, '[^.\\[\\]]*');
+        
+        try {
+          const regex = new RegExp(`^${regexPattern}`);
+          if (regex.test(path)) {
+            return true;
+          }
+        } catch (e) {
+          // If regex fails, continue
+        }
+      }
+    }
+  }
+  
+  // For include mode, return false if no pattern matches
+  return false;
+};
+
+/**
  * Handles comparison for arrays and objects
  * @param firstValue - First value to compare
  * @param secondValue - Second value to compare
@@ -169,7 +410,12 @@ const handleDepthComparison = (
   firstVisited: Map<any, string> = new Map(),
   secondVisited: Map<any, string> = new Map()
 ): string[] | DetailedDifference[] | boolean => {
-  const { strict = true, circularReferences = 'error' } = options;
+  const { strict = true, circularReferences = 'error', pathFilter } = options;
+
+  // If we should skip comparing this path due to pathFilter, return true (consider them equal)
+  if (currentPath && !shouldComparePath(currentPath, pathFilter)) {
+    return true;
+  }
 
   // Handle Date objects specially
   if (firstValue instanceof Date && secondValue instanceof Date) {
@@ -235,6 +481,11 @@ const handleDepthComparison = (
     secondVisited.set(secondValue, currentPath);
 
     if (firstValue.length !== secondValue.length) {
+      // If this is a direct array comparison and the path should be filtered
+      if (isArrayComparison && pathFilter && !shouldComparePath(currentPath, pathFilter)) {
+        return true; // Consider them equal if filtered
+      }
+      
       return isArrayComparison 
         ? false 
         : (detailed 
@@ -255,6 +506,11 @@ const handleDepthComparison = (
     for (let i = 0; i < firstValue.length; i++) {
       // Construct the array element path
       const elemPath = `${currentPath}[${i}]`;
+      
+      // Skip comparison if the path should be filtered
+      if (!shouldComparePath(elemPath, pathFilter)) {
+        continue;
+      }
       
       // Compare array elements
       if (isObject(firstValue[i]) && isObject(secondValue[i])) {
@@ -400,6 +656,11 @@ const handleDepthComparison = (
       const hasFirst = hasOwn(firstValue, key);
       const hasSecond = hasOwn(secondValue, key);
       const propPath = currentPath ? `${currentPath}.${key}` : key;
+      
+      // Skip this property if it should be filtered based on pathFilter
+      if (!shouldComparePath(propPath, pathFilter)) {
+        continue;
+      }
       
       // If key exists in one but not in the other
       if (!hasFirst || !hasSecond) {
@@ -555,7 +816,7 @@ const CompareValuesWithConflicts = <T extends Record<string, any>, U extends Rec
   options: ComparisonOptions = {}
 ): string[] => {
   // Extract options
-  const { circularReferences = 'error' } = options;
+  const { circularReferences = 'error', pathFilter } = options;
 
   // If the objects are the same reference, there are no conflicts
   if (Object.is(firstObject, secondObject)) {
@@ -594,9 +855,20 @@ const CompareValuesWithConflicts = <T extends Record<string, any>, U extends Rec
     const processedConflicts = new Set<string>();
     
     for (const conflict of stringConflicts) {
+      // If this path should be filtered out, skip it
+      if (pathFilter && !shouldComparePath(conflict, pathFilter)) {
+        continue;
+      }
+      
       // If this is an array element conflict (contains [), get the array path
       if (conflict.includes('[')) {
         const arrayPath = conflict.substring(0, conflict.indexOf('['));
+        
+        // If the array path should be filtered, skip this conflict
+        if (pathFilter && !shouldComparePath(arrayPath, pathFilter)) {
+          continue;
+        }
+        
         processedConflicts.add(arrayPath);
       } else {
         processedConflicts.add(conflict);
@@ -633,7 +905,7 @@ const CompareValuesWithDetailedDifferences = <T extends Record<string, any>, U e
   options: ComparisonOptions = {}
 ): DetailedDifference[] => {
   // Extract options
-  const { circularReferences = 'error' } = options;
+  const { circularReferences = 'error', pathFilter } = options;
 
   // If the objects are the same reference, there are no differences
   if (Object.is(firstObject, secondObject)) {
@@ -656,10 +928,267 @@ const CompareValuesWithDetailedDifferences = <T extends Record<string, any>, U e
     }
   }
 
+  // Handle path filtering specially for include mode
+  if (pathFilter && pathFilter.mode === 'include') {
+    // For include mode, we'll do a more direct comparison
+    const differences: DetailedDifference[] = [];
+    
+    // Special handling for array patterns
+    const hasArrayPatterns = pathFilter.patterns.some(p => p.startsWith('['));
+    
+    // Function to compare properties based on path patterns
+    const comparePropertiesRecursively = (
+      first: any,
+      second: any,
+      currentPath: string
+    ) => {
+      // Special case for top-level array with [*] patterns
+      if (currentPath === '' && Array.isArray(first) && Array.isArray(second) && hasArrayPatterns) {
+        for (let i = 0; i < Math.max(first.length, second.length); i++) {
+          const elemPath = `[${i}]`;
+          
+          if (i >= first.length) {
+            // Handle added elements
+            for (const pattern of pathFilter.patterns) {
+              if (pattern.startsWith('[*]')) {
+                const propPattern = pattern.substring(3); // Remove '[*]'
+                if (propPattern) {
+                  // Check properties inside array element
+                  if (typeof second[i] === 'object' && second[i] !== null) {
+                    const propKey = propPattern.startsWith('.') ? propPattern.substring(1) : propPattern;
+                    if (hasOwn(second[i], propKey)) {
+                      differences.push({
+                        path: `[${i}]${propPattern}`,
+                        type: 'added',
+                        oldValue: undefined,
+                        newValue: second[i][propKey]
+                      });
+                    }
+                  }
+                } else {
+                  // Match the entire element
+                  differences.push({
+                    path: elemPath,
+                    type: 'added',
+                    oldValue: undefined,
+                    newValue: second[i]
+                  });
+                }
+              }
+            }
+          } else if (i >= second.length) {
+            // Handle removed elements
+            for (const pattern of pathFilter.patterns) {
+              if (pattern.startsWith('[*]')) {
+                const propPattern = pattern.substring(3); // Remove '[*]'
+                if (propPattern) {
+                  // Check properties inside array element
+                  if (typeof first[i] === 'object' && first[i] !== null) {
+                    const propKey = propPattern.startsWith('.') ? propPattern.substring(1) : propPattern;
+                    if (hasOwn(first[i], propKey)) {
+                      differences.push({
+                        path: `[${i}]${propPattern}`,
+                        type: 'removed',
+                        oldValue: first[i][propKey],
+                        newValue: undefined
+                      });
+                    }
+                  }
+                } else {
+                  // Match the entire element
+                  differences.push({
+                    path: elemPath,
+                    type: 'removed',
+                    oldValue: first[i],
+                    newValue: undefined
+                  });
+                }
+              }
+            }
+          } else {
+            // Compare existing elements
+            for (const pattern of pathFilter.patterns) {
+              if (pattern.startsWith('[*]')) {
+                const propPattern = pattern.substring(3); // Remove '[*]'
+                if (propPattern) {
+                  // Check properties inside array element
+                  const propKey = propPattern.startsWith('.') ? propPattern.substring(1) : propPattern;
+                  
+                  if (typeof first[i] === 'object' && first[i] !== null &&
+                      typeof second[i] === 'object' && second[i] !== null) {
+                    if (hasOwn(first[i], propKey) && hasOwn(second[i], propKey)) {
+                      if (!areValuesEqual(first[i][propKey], second[i][propKey], options.strict)) {
+                        differences.push({
+                          path: `[${i}]${propPattern}`,
+                          type: 'changed',
+                          oldValue: first[i][propKey],
+                          newValue: second[i][propKey]
+                        });
+                      }
+                    } else if (hasOwn(first[i], propKey)) {
+                      differences.push({
+                        path: `[${i}]${propPattern}`,
+                        type: 'removed',
+                        oldValue: first[i][propKey],
+                        newValue: undefined
+                      });
+                    } else if (hasOwn(second[i], propKey)) {
+                      differences.push({
+                        path: `[${i}]${propPattern}`,
+                        type: 'added',
+                        oldValue: undefined,
+                        newValue: second[i][propKey]
+                      });
+                    }
+                  }
+                } else {
+                  // Match the entire element
+                  if (!areValuesEqual(first[i], second[i], options.strict)) {
+                    differences.push({
+                      path: elemPath,
+                      type: 'changed',
+                      oldValue: first[i],
+                      newValue: second[i]
+                    });
+                  }
+                }
+              }
+            }
+          }
+        }
+        return;
+      }
+      
+      // Skip if we're not at a pattern that should be included
+      if (!shouldComparePath(currentPath, pathFilter)) {
+        // But check if any children would match before skipping
+        let matchesChild = false;
+        
+        for (const pattern of pathFilter.patterns) {
+          if (pattern.startsWith(currentPath + '.') || 
+              (currentPath === '' && !pattern.startsWith('.'))) {
+            matchesChild = true;
+            break;
+          }
+        }
+        
+        if (!matchesChild) {
+          return;
+        }
+      }
+      
+      // For simple types, compare directly
+      if (typeof first !== 'object' || first === null || 
+          typeof second !== 'object' || second === null) {
+        if (!areValuesEqual(first, second, options.strict)) {
+          differences.push({
+            path: currentPath,
+            type: 'changed',
+            oldValue: first,
+            newValue: second
+          });
+        }
+        return;
+      }
+      
+      // Handle arrays
+      if (Array.isArray(first) && Array.isArray(second)) {
+        for (let i = 0; i < Math.max(first.length, second.length); i++) {
+          const elemPath = `${currentPath}[${i}]`;
+          
+          if (i >= first.length) {
+            // Element added in second array
+            if (shouldComparePath(elemPath, pathFilter)) {
+              differences.push({
+                path: elemPath,
+                type: 'added',
+                oldValue: undefined,
+                newValue: second[i]
+              });
+            }
+          } else if (i >= second.length) {
+            // Element removed in second array
+            if (shouldComparePath(elemPath, pathFilter)) {
+              differences.push({
+                path: elemPath,
+                type: 'removed',
+                oldValue: first[i],
+                newValue: undefined
+              });
+            }
+          } else {
+            // Compare elements
+            comparePropertiesRecursively(first[i], second[i], elemPath);
+          }
+        }
+        return;
+      }
+      
+      // Handle objects
+      const allKeys = new Set([...Object.keys(first), ...Object.keys(second)]);
+      
+      for (const key of allKeys) {
+        const propPath = currentPath ? `${currentPath}.${key}` : key;
+        
+        if (!hasOwn(first, key)) {
+          // Property added in second object
+          if (shouldComparePath(propPath, pathFilter)) {
+            differences.push({
+              path: propPath,
+              type: 'added',
+              oldValue: undefined,
+              newValue: second[key]
+            });
+          }
+        } else if (!hasOwn(second, key)) {
+          // Property removed in second object
+          if (shouldComparePath(propPath, pathFilter)) {
+            differences.push({
+              path: propPath,
+              type: 'removed',
+              oldValue: first[key],
+              newValue: undefined
+            });
+          }
+        } else {
+          // Compare properties
+          comparePropertiesRecursively(first[key], second[key], propPath);
+        }
+      }
+    };
+    
+    // Start the recursive comparison
+    comparePropertiesRecursively(firstObject, secondObject, pathOfConflict);
+    
+    return differences;
+  }
+
   try {
-    // Use the unified depth handling function with detailed flag
-    const conflicts = handleDepthComparison(firstObject, secondObject, pathOfConflict, options, false, true);
-    return Array.isArray(conflicts) ? conflicts as DetailedDifference[] : [];
+    // For exclude mode, use the unified depth handling function
+    const differences = handleDepthComparison(firstObject, secondObject, pathOfConflict, options, false, true);
+    
+    if (!Array.isArray(differences)) {
+      return [];
+    }
+    
+    // Type assertion because we know the differences will be DetailedDifference objects due to detailed=true parameter
+    const detailedDifferences = differences as DetailedDifference[];
+    
+    // Filter the differences based on the path filter settings
+    if (pathFilter && pathFilter.patterns && pathFilter.patterns.length > 0) {
+      return detailedDifferences.filter(diff => {
+        // Skip undefined paths (shouldn't happen, but just in case)
+        if (!diff.path) {
+          return false;
+        }
+        
+        // For 'exclude' mode: keep if NOT matching any pattern
+        const matchesPattern = shouldFilterPath(diff.path, pathFilter);
+        return !matchesPattern;
+      });
+    }
+    
+    return detailedDifferences;
   } catch (error) {
     if (error instanceof CircularReferenceError) {
       if (circularReferences === 'error') {

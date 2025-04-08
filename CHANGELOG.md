@@ -2,6 +2,17 @@
 
 All notable changes to the object-deep-compare project will be documented in this file.
 
+## [2.3.0] - 2024-04-08
+
+### Added
+- **Property Path Filtering**:
+  - New `pathFilter` option in ComparisonOptions to specify which properties to compare or ignore
+  - Support for wildcard patterns, exact paths, and property name patterns
+  - Two filtering modes: 'include' to only compare matching paths or 'exclude' to ignore matching paths
+  - New helper functions to match paths against patterns
+  - New types `PathFilter` and `PathFilterMode` for configuring path filtering
+  - Added examples in documentation that show how to ignore timestamps, auto-generated IDs, etc.
+
 ## [2.2.0] - 2024-04-08
 
 ### Added
