@@ -1,6 +1,6 @@
 # object-deep-compare
 
-[![npm version](https://img.shields.io/badge/npm-v2.2.0-blue)](https://www.npmjs.com/package/object-deep-compare)
+[![npm version](https://img.shields.io/badge/npm-v2.4.0-blue)](https://www.npmjs.com/package/object-deep-compare)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/)
 [![Zero Dependencies](https://img.shields.io/badge/Zero-Dependencies-green.svg)](https://www.npmjs.com/package/object-deep-compare)
@@ -38,7 +38,13 @@ yarn add object-deep-compare
 
 ### CommonJS
 ```js
-const objectDeepCompare = require('object-deep-compare');
+const { 
+  CompareProperties, 
+  CompareArrays, 
+  CompareValuesWithConflicts,
+  CompareValuesWithDetailedDifferences,
+  // Other functions as needed...
+} = require('object-deep-compare');
 ```
 
 ### ES Modules
@@ -48,13 +54,22 @@ import {
   CompareArrays, 
   CompareValuesWithConflicts,
   CompareValuesWithDetailedDifferences,
+  TypeSafeCompareObjects,
+  ObjectsAreEqual,
+  IsSubset,
+  // Schema validation
+  ValidateObjectsAgainstSchemas,
+  // Types
   ComparisonOptions,
   CircularReferenceHandling,
   PathFilter,
   PathFilterMode,
   SchemaValidation
+  // Other functions and types as needed...
 } from 'object-deep-compare';
 ```
+
+All functions are named exports, so you can import only the specific functions you need.
 
 ## Schema Validation
 
@@ -218,7 +233,10 @@ const secondObject = {
 	foo: 2,
 };
 
-const result = objectDeepCompare.CompareProperties(firstObject, secondObject);
+const { CompareProperties } = require('object-deep-compare');
+// Or using ES modules: import { CompareProperties } from 'object-deep-compare';
+
+const result = CompareProperties(firstObject, secondObject);
 console.log(result);
 /*
 Will return: 
@@ -249,14 +267,17 @@ This method compares two arrays for equality. It returns true or false.
 const firstArray = [1, 2];
 const secondArray = [1, 2];
 
-const isEqual = objectDeepCompare.CompareArrays(firstArray, secondArray);
+const { CompareArrays } = require('object-deep-compare');
+// Or using ES modules: import { CompareArrays } from 'object-deep-compare';
+
+const isEqual = CompareArrays(firstArray, secondArray);
 console.log(isEqual); // true
 
 // With options
 const deepArray1 = [1, [2, [3, 4]]];
 const deepArray2 = [1, [2, [3, 5]]];
 
-const isEqualWithStrict = objectDeepCompare.CompareArrays(
+const isEqualWithStrict = CompareArrays(
 	deepArray1,
 	deepArray2,
 	{ strict: true }
@@ -295,7 +316,10 @@ const secondObject = {
 	}
 };
 
-const conflicts = objectDeepCompare.CompareValuesWithConflicts(firstObject, secondObject);
+const { CompareValuesWithConflicts } = require('object-deep-compare');
+// Or using ES modules: import { CompareValuesWithConflicts } from 'object-deep-compare';
+
+const conflicts = CompareValuesWithConflicts(firstObject, secondObject);
 console.log(conflicts);
 /*
 Will return: ['nested.foo', 'nested.bar']
@@ -305,7 +329,7 @@ Will return: ['nested.foo', 'nested.bar']
 const deepObject1 = { level1: { level2: { level3: { value: 42 } } } };
 const deepObject2 = { level1: { level2: { level3: { value: 43 } } } };
 
-const conflictsWithStrict = objectDeepCompare.CompareValuesWithConflicts(
+const conflictsWithStrict = CompareValuesWithConflicts(
 	deepObject1,
 	deepObject2,
 	'',
@@ -352,7 +376,10 @@ const secondObject = {
   }
 };
 
-const detailedDiffs = objectDeepCompare.CompareValuesWithDetailedDifferences(firstObject, secondObject);
+const { CompareValuesWithDetailedDifferences } = require('object-deep-compare');
+// Or using ES modules: import { CompareValuesWithDetailedDifferences } from 'object-deep-compare';
+
+const detailedDiffs = CompareValuesWithDetailedDifferences(firstObject, secondObject);
 console.log(detailedDiffs);
 /*
 Will return: [
@@ -459,6 +486,40 @@ This method compares two arrays with type information.
   - `firstType`: Type of the first array
   - `secondType`: Type of the second array
 
+#### Example:
+```ts
+const stringArray = ['a', 'b', 'c'];
+const numberArray = [1, 2, 3];
+const mixedArray = ['a', 2, true];
+
+const { TypeSafeCompareArrays } = require('object-deep-compare');
+// Or using ES modules: import { TypeSafeCompareArrays } from 'object-deep-compare';
+
+// Compare arrays of different types
+const result = TypeSafeCompareArrays(stringArray, numberArray);
+console.log(result);
+/* Will return:
+{
+  isEqual: false,
+  firstType: 'Array<string>',
+  secondType: 'Array<number>'
+}
+*/
+
+// With includeTypeInfo option
+const detailedResult = TypeSafeCompareArrays(stringArray, mixedArray, {
+  includeTypeInfo: true
+});
+console.log(detailedResult);
+/* Will return:
+{
+  isEqual: false,
+  firstType: 'Array<string>',
+  secondType: 'Array<string|number|boolean>'
+}
+*/
+```
+
 ### `TypeSafeCompareObjects`
 
 This method compares two objects and supports objects with different but compatible types.
@@ -480,6 +541,71 @@ This method compares two objects and supports objects with different but compati
   - `isEqual`: Boolean indicating if objects are equal
   - `firstType`: Type of the first object
   - `secondType`: Type of the second object
+
+#### Example:
+```ts
+// Different but compatible object types
+interface User {
+  id: string;
+  name: string;
+  age: number;
+}
+
+interface Employee {
+  employeeId: string;
+  fullName: string;
+  age: number;
+  department: string;
+}
+
+const user: User = {
+  id: '1001',
+  name: 'John Doe',
+  age: 30
+};
+
+const employee: Employee = {
+  employeeId: '1001',
+  fullName: 'John Doe',
+  age: 30,
+  department: 'Engineering'
+};
+
+const { TypeSafeCompareObjects } = require('object-deep-compare');
+// Or using ES modules: import { TypeSafeCompareObjects } from 'object-deep-compare';
+
+// Using property mapping to compare objects with different structures
+const result = TypeSafeCompareObjects(user, employee, {
+  propertyMapping: {
+    id: 'employeeId',
+    name: 'fullName'
+  },
+  includeTypeInfo: true
+});
+
+console.log(result);
+/* Will return:
+{
+  isEqual: true,
+  firstType: 'User',
+  secondType: 'Employee'
+}
+*/
+
+// With custom comparator for specific properties
+const customResult = TypeSafeCompareObjects(user, employee, {
+  propertyMapping: {
+    id: 'employeeId',
+    name: 'fullName'
+  },
+  customComparators: {
+    // Case-insensitive string comparison for name fields
+    'name': (val1, val2) => val1.toLowerCase() === val2.toLowerCase()
+  }
+});
+
+console.log(customResult.isEqual); // true
+```
 
 ### `TypeSafeCompareValuesWithDetailedDifferences`
 
@@ -503,6 +629,66 @@ This method performs a deep comparison of two objects and returns detailed diffe
   - `oldValueType`: Type of the old value
   - `newValueType`: Type of the new value
 
+#### Example:
+```ts
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+  stock?: number;
+}
+
+const oldProduct: Product = {
+  id: 'prod-001',
+  name: 'Original Product',
+  price: 29.99
+};
+
+const newProduct: Product = {
+  id: 'prod-001',
+  name: 'Updated Product',
+  price: 39.99,
+  stock: 100
+};
+
+const { TypeSafeCompareValuesWithDetailedDifferences } = require('object-deep-compare');
+// Or using ES modules: import { TypeSafeCompareValuesWithDetailedDifferences } from 'object-deep-compare';
+
+const differences = TypeSafeCompareValuesWithDetailedDifferences(oldProduct, newProduct, {
+  includeTypeInfo: true
+});
+
+console.log(differences);
+/* Will return:
+[
+  {
+    path: 'name',
+    type: 'changed',
+    oldValue: 'Original Product',
+    newValue: 'Updated Product',
+    oldValueType: 'string',
+    newValueType: 'string'
+  },
+  {
+    path: 'price',
+    type: 'changed',
+    oldValue: 29.99,
+    newValue: 39.99,
+    oldValueType: 'number',
+    newValueType: 'number'
+  },
+  {
+    path: 'stock',
+    type: 'added',
+    oldValue: undefined,
+    newValue: 100,
+    oldValueType: 'undefined',
+    newValueType: 'number'
+  }
+]
+*/
+```
+
 ### `ObjectsAreEqual`
 
 Type guard function that checks if two objects are equal and narrows types in conditional branches.
@@ -518,6 +704,47 @@ Type guard function that checks if two objects are equal and narrows types in co
 
 #### Returns:
 - Type predicate indicating if the objects are equal (narrows type to intersection)
+
+#### Example:
+```ts
+interface Shape {
+  type: string;
+  color: string;
+}
+
+interface Circle extends Shape {
+  type: 'circle';
+  radius: number;
+}
+
+interface Square extends Shape {
+  type: 'square';
+  sideLength: number;
+}
+
+function processShape(shape1: Shape, shape2: Shape) {
+  const { ObjectsAreEqual } = require('object-deep-compare');
+  // Or using ES modules: import { ObjectsAreEqual } from 'object-deep-compare';
+
+  // ObjectsAreEqual acts as a type guard
+  if (ObjectsAreEqual(shape1, shape2)) {
+    // TypeScript now knows both shapes are equal
+    console.log('Shapes are equal:', shape1.type);
+    return true;
+  } else {
+    console.log('Shapes are different');
+    // TypeScript maintains the original types
+    return false;
+  }
+}
+
+const circle: Circle = { type: 'circle', color: 'red', radius: 10 };
+const sameCircle: Circle = { type: 'circle', color: 'red', radius: 10 };
+const differentCircle: Circle = { type: 'circle', color: 'blue', radius: 5 };
+
+processShape(circle, sameCircle); // "Shapes are equal: circle"
+processShape(circle, differentCircle); // "Shapes are different"
+```
 
 ### `IsSubset`
 
@@ -535,6 +762,53 @@ Checks if the second object is a subset of the first object.
 #### Returns:
 - `boolean`: True if second object is a subset of first object
 
+#### Example:
+```ts
+const completeUser = {
+  id: '1001',
+  name: 'Jane Smith',
+  age: 28,
+  email: 'jane@example.com',
+  settings: {
+    theme: 'dark',
+    notifications: true,
+    privacyLevel: 'high'
+  }
+};
+
+const partialUser = {
+  id: '1001',
+  name: 'Jane Smith'
+};
+
+const partialSettings = {
+  settings: {
+    theme: 'dark'
+  }
+};
+
+const { IsSubset } = require('object-deep-compare');
+// Or using ES modules: import { IsSubset } from 'object-deep-compare';
+
+console.log(IsSubset(completeUser, partialUser)); // true
+console.log(IsSubset(completeUser, partialSettings)); // true
+
+// Non-matching subset
+const nonMatchingUser = {
+  id: '1001',
+  name: 'Different Name'
+};
+console.log(IsSubset(completeUser, nonMatchingUser)); // false
+
+// Extra properties
+const extraPropsUser = {
+  id: '1001',
+  name: 'Jane Smith',
+  role: 'admin' // This property doesn't exist in completeUser
+};
+console.log(IsSubset(completeUser, extraPropsUser)); // false
+```
+
 ### `GetCommonStructure`
 
 Gets the common structure between two objects.
@@ -546,6 +820,50 @@ Gets the common structure between two objects.
 #### Returns:
 - `Partial<CompatibleObject<T, U>>`: A new object containing only common properties
 
+#### Example:
+```ts
+const user1 = {
+  id: 'user1',
+  name: 'Alice',
+  age: 30,
+  email: 'alice@example.com',
+  settings: {
+    theme: 'light',
+    notifications: true
+  }
+};
+
+const user2 = {
+  id: 'user2',
+  name: 'Bob',
+  age: 25,
+  role: 'admin',
+  settings: {
+    theme: 'dark',
+    privacyLevel: 'high'
+  }
+};
+
+const { GetCommonStructure } = require('object-deep-compare');
+// Or using ES modules: import { GetCommonStructure } from 'object-deep-compare';
+
+const common = GetCommonStructure(user1, user2);
+console.log(common);
+/* Will return:
+{
+  id: 'user1',  // Values from first object are used
+  name: 'Alice',
+  age: 30,
+  settings: {
+    theme: 'light'
+  }
+}
+*/
+
+// The result contains only properties present in both objects,
+// with nested objects showing their common structure
+```
+
 ## Advanced Usage
 
 ### Handling Special Values
@@ -556,8 +874,11 @@ The library correctly handles special values like `NaN`, `null`, and `undefined`
 const obj1 = { value: NaN };
 const obj2 = { value: NaN };
 
+const { CompareArrays } = require('object-deep-compare');
+// Or using ES modules: import { CompareArrays } from 'object-deep-compare';
+
 // NaN === NaN is false in JavaScript, but our library correctly identifies them as equal
-const isEqual = objectDeepCompare.CompareArrays(obj1, obj2);
+const isEqual = CompareArrays(obj1, obj2);
 console.log(isEqual); // true
 ```
 
@@ -570,10 +891,13 @@ const date1 = new Date('2023-01-01');
 const date2 = new Date('2023-01-01');
 const date3 = new Date('2023-01-02');
 
-const isEqual = objectDeepCompare.CompareArrays(date1, date2);
+const { CompareArrays } = require('object-deep-compare');
+// Or using ES modules: import { CompareArrays } from 'object-deep-compare';
+
+const isEqual = CompareArrays(date1, date2);
 console.log(isEqual); // true
 
-const isNotEqual = objectDeepCompare.CompareArrays(date1, date3);
+const isNotEqual = CompareArrays(date1, date3);
 console.log(isNotEqual); // false
 ```
 
@@ -586,10 +910,13 @@ const regex1 = /test/g;
 const regex2 = /test/g;
 const regex3 = /test/i;
 
-const isEqual = objectDeepCompare.CompareArrays(regex1, regex2);
+const { CompareArrays } = require('object-deep-compare');
+// Or using ES modules: import { CompareArrays } from 'object-deep-compare';
+
+const isEqual = CompareArrays(regex1, regex2);
 console.log(isEqual); // true
 
-const isNotEqual = objectDeepCompare.CompareArrays(regex1, regex3);
+const isNotEqual = CompareArrays(regex1, regex3);
 console.log(isNotEqual); // false
 ```
 
@@ -605,23 +932,26 @@ obj1.self = obj1; // Self-reference
 const obj2 = { a: 1, b: 2 };
 obj2.self = obj2; // Self-reference
 
+const { CompareValuesWithDetailedDifferences } = require('object-deep-compare');
+// Or using ES modules: import { CompareValuesWithDetailedDifferences } from 'object-deep-compare';
+
 // By default, circular references will throw an error
 try {
-  const diffs = objectDeepCompare.CompareValuesWithDetailedDifferences(obj1, obj2);
+  const diffs = CompareValuesWithDetailedDifferences(obj1, obj2);
 } catch (error) {
   console.log(error.message); // "Circular reference detected at path: self"
 }
 
 // Use the circularReferences option to handle circular references gracefully
 const options = { circularReferences: 'ignore' };
-const diffs = objectDeepCompare.CompareValuesWithDetailedDifferences(obj1, obj2, '', options);
+const diffs = CompareValuesWithDetailedDifferences(obj1, obj2, '', options);
 console.log(diffs); // [] (empty array, objects are equal)
 
 // Objects with the same structure but different values will still show differences
 const obj3 = { a: 1, b: 3 }; // Different value for b
 obj3.self = obj3;
 
-const diffResults = objectDeepCompare.CompareValuesWithDetailedDifferences(obj1, obj3, '', options);
+const diffResults = CompareValuesWithDetailedDifferences(obj1, obj3, '', options);
 console.log(diffResults[0].path); // "b"
 ```
 
@@ -636,10 +966,13 @@ Memoized version of `CompareProperties` that caches results based on object refe
 const obj1 = { a: 1, b: 2 };
 const obj2 = { a: 1, c: 3 };
 
+const { MemoizedCompareProperties } = require('object-deep-compare');
+// Or using ES modules: import { MemoizedCompareProperties } from 'object-deep-compare';
+
 // First call computes the result
-const result1 = objectDeepCompare.MemoizedCompareProperties(obj1, obj2);
+const result1 = MemoizedCompareProperties(obj1, obj2);
 // Second call with same objects returns cached result
-const result2 = objectDeepCompare.MemoizedCompareProperties(obj1, obj2);
+const result2 = MemoizedCompareProperties(obj1, obj2);
 ```
 
 ### `MemoizedCompareArrays`
@@ -650,10 +983,13 @@ const arr1 = [1, 2, 3];
 const arr2 = [1, 2, 3];
 const options = { strict: true };
 
+const { MemoizedCompareArrays } = require('object-deep-compare');
+// Or using ES modules: import { MemoizedCompareArrays } from 'object-deep-compare';
+
 // First call computes the result
-const result1 = objectDeepCompare.MemoizedCompareArrays(arr1, arr2, options);
+const result1 = MemoizedCompareArrays(arr1, arr2, options);
 // Second call with same arrays and options returns cached result
-const result2 = objectDeepCompare.MemoizedCompareArrays(arr1, arr2, options);
+const result2 = MemoizedCompareArrays(arr1, arr2, options);
 ```
 
 ### `MemoizedCompareValuesWithConflicts`
@@ -665,23 +1001,132 @@ const obj2 = { nested: { value: 2 } };
 const path = '';
 const options = { strict: true };
 
+const { MemoizedCompareValuesWithConflicts } = require('object-deep-compare');
+// Or using ES modules: import { MemoizedCompareValuesWithConflicts } from 'object-deep-compare';
+
 // First call computes the result
-const result1 = objectDeepCompare.MemoizedCompareValuesWithConflicts(obj1, obj2, path, options);
+const result1 = MemoizedCompareValuesWithConflicts(obj1, obj2, path, options);
 // Second call with same parameters returns cached result
-const result2 = objectDeepCompare.MemoizedCompareValuesWithConflicts(obj1, obj2, path, options);
+const result2 = MemoizedCompareValuesWithConflicts(obj1, obj2, path, options);
 ```
 
-### `memoize` Utility
-A generic memoization utility function that can be used to memoize any function.
+### `MemoizedCompareValuesWithDetailedDifferences`
+Memoized version of `CompareValuesWithDetailedDifferences` that caches results for better performance.
 
 ```ts
-const myFunction = (a: number, b: number) => a + b;
-const memoizedFn = objectDeepCompare.memoize(myFunction);
+const obj1 = { user: { name: 'John', age: 30 } };
+const obj2 = { user: { name: 'John', age: 31 } };
+
+const { MemoizedCompareValuesWithDetailedDifferences } = require('object-deep-compare');
+// Or using ES modules: import { MemoizedCompareValuesWithDetailedDifferences } from 'object-deep-compare';
 
 // First call computes the result
-const result1 = memoizedFn(1, 2);
-// Second call with same arguments returns cached result
-const result2 = memoizedFn(1, 2);
+const result1 = MemoizedCompareValuesWithDetailedDifferences(obj1, obj2);
+// Second call with same objects returns cached result
+const result2 = MemoizedCompareValuesWithDetailedDifferences(obj1, obj2);
+```
+
+### Path Filtering
+
+You can include or exclude specific properties from comparison using the `pathFilter` option.
+
+#### PathFilter interface:
+```ts
+interface PathFilter {
+  patterns: string[];  // Array of path patterns to match
+  mode?: 'include' | 'exclude';  // Whether to include or exclude matched paths (default: 'exclude')
+}
+```
+
+#### Path pattern types:
+- **Exact paths**: Match a specific property path (e.g., `'user.name'`)
+- **Leading dot paths**: Match any property with the specified name at any level (e.g., `'.timestamp'` matches `'timestamp'`, `'user.timestamp'`, `'logs.entry.timestamp'`, etc.)
+- **Wildcard paths**: Use `*` to match any property name in a path (e.g., `'user.*.created'` matches `'user.profile.created'`, `'user.settings.created'`, etc.)
+
+#### Examples:
+
+Ignore all timestamp properties:
+```ts
+const options = {
+  pathFilter: {
+    patterns: ['.timestamp', '.createdAt', '.updatedAt'],
+    mode: 'exclude'  // This is the default mode
+  }
+};
+
+const { CompareValuesWithConflicts } = require('object-deep-compare');
+// Or using ES modules: import { CompareValuesWithConflicts } from 'object-deep-compare';
+
+const differences = CompareValuesWithConflicts(obj1, obj2, '', options);
+```
+
+Only compare specific fields:
+```ts
+const options = {
+  pathFilter: {
+    patterns: ['user.name', 'user.email', 'settings.*'],
+    mode: 'include'
+  }
+};
+
+const { CompareValuesWithDetailedDifferences } = require('object-deep-compare');
+// Or using ES modules: import { CompareValuesWithDetailedDifferences } from 'object-deep-compare';
+
+const differences = CompareValuesWithDetailedDifferences(obj1, obj2, '', options);
+```
+
+Compare everything except auto-generated IDs:
+```ts
+const options = {
+  pathFilter: {
+    patterns: ['.id', '.uuid', '*.id'],
+    mode: 'exclude'
+  }
+};
+
+const { CompareArrays } = require('object-deep-compare');
+// Or using ES modules: import { CompareArrays } from 'object-deep-compare';
+
+const isEqual = CompareArrays(array1, array2, options);
+```
+
+### `Memoize` Utility
+A generic memoization utility function that can be used to memoize any function.
+
+#### Parameters:
+- `fn` - The function to memoize
+- `keyFn` (optional) - A custom function to generate cache keys for the arguments
+
+#### Returns:
+- A memoized version of the function that caches results based on input arguments
+
+#### Example:
+```ts
+const { Memoize } = require('object-deep-compare');
+// Or using ES modules: import { Memoize } from 'object-deep-compare';
+
+// Create a computationally expensive function
+const calculateFactorial = (n: number): number => {
+  if (n <= 1) return 1;
+  return n * calculateFactorial(n - 1);
+};
+
+// Create a memoized version of the function
+const memoizedFactorial = Memoize(calculateFactorial);
+
+console.time('first-call');
+const result1 = memoizedFactorial(20); // This will compute the result
+console.timeEnd('first-call'); // e.g., "first-call: 5.123ms"
+
+console.time('second-call');
+const result2 = memoizedFactorial(20); // This will return the cached result
+console.timeEnd('second-call'); // e.g., "second-call: 0.052ms" (much faster)
+
+// You can also provide a custom key generation function
+const customKeyMemoize = Memoize(
+  (a: object, b: object) => Object.assign({}, a, b),
+  (a, b) => JSON.stringify([Object.keys(a).sort(), Object.keys(b).sort()])
+);
 ```
 
 ## Dependencies
@@ -726,6 +1171,9 @@ const options = {
   }
 };
 
+const { CompareValuesWithConflicts } = require('object-deep-compare');
+// Or using ES modules: import { CompareValuesWithConflicts } from 'object-deep-compare';
+
 const differences = CompareValuesWithConflicts(obj1, obj2, '', options);
 ```
 
@@ -738,6 +1186,9 @@ const options = {
   }
 };
 
+const { CompareValuesWithDetailedDifferences } = require('object-deep-compare');
+// Or using ES modules: import { CompareValuesWithDetailedDifferences } from 'object-deep-compare';
+
 const differences = CompareValuesWithDetailedDifferences(obj1, obj2, '', options);
 ```
 
@@ -749,6 +1200,9 @@ const options = {
     mode: 'exclude'
   }
 };
+
+const { CompareArrays } = require('object-deep-compare');
+// Or using ES modules: import { CompareArrays } from 'object-deep-compare';
 
 const isEqual = CompareArrays(array1, array2, options);
 ```

@@ -1,6 +1,6 @@
 {
   "name": "object-deep-compare",
-  "version": "2.4.0",
+  "version": "2.0.0",
   "description": "A type-safe collection of comparison methods for objects and arrays in TypeScript/JavaScript",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
