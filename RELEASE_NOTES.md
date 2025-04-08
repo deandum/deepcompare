@@ -11,7 +11,7 @@ The entire library has been converted to TypeScript, providing full type safety 
 We've removed the lodash dependency and replaced all functionality with native JavaScript methods.
 
 ### New Features
-- **Configuration Options**: New `maxDepth` and `strict` options to control comparison behavior
+- **Configuration Options**: New `strict` option to control comparison behavior
 - **Special Value Handling**: Better handling of special values like `NaN`, `Date` objects, and `RegExp`
 - **Performance Optimizations**: More efficient algorithms and data structures
 
@@ -40,7 +40,7 @@ const conflicts = CompareValuesWithConflicts(
   { level1: { level2: { level3: { value: 42 } } } },
   { level1: { level2: { level3: { value: 43 } } } },
   '',
-  { maxDepth: 2 } // Limit comparison depth
+  { strict: true } // Control strict equality
 );
 ```
 

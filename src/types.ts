@@ -11,12 +11,6 @@ export interface ComparePropertiesResult {
  */
 export interface ComparisonOptions {
   /**
-   * Maximum depth to traverse when comparing objects
-   * @default Infinity
-   */
-  maxDepth?: number;
-  
-  /**
    * Whether to use strict equality (===) for comparing values
    * @default true
    */

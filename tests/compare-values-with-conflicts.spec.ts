@@ -240,54 +240,6 @@ describe('Test CompareValuesWithConflicts method', () => {
     });
   });
   
-  describe('with maxDepth option', () => {
-    it('limits the depth of object comparison', () => {
-      firstObject = {
-        level1: {
-          level2: {
-            level3: {
-              value: 42
-            }
-          }
-        }
-      };
-      
-      secondObject = {
-        level1: {
-          level2: {
-            level3: {
-              value: 43
-            }
-          }
-        }
-      };
-      
-      // Full depth comparison should find the difference
-      conflicts = deepCompare.CompareValuesWithConflicts(firstObject, secondObject, '');
-      expect(conflicts.length).toBe(1);
-      expect(conflicts[0]).toBe('level1.level2.level3.value');
-      
-      // Limited depth to 2 levels should not find the difference
-      conflicts = deepCompare.CompareValuesWithConflicts(
-        firstObject, 
-        secondObject, 
-        '', 
-        { maxDepth: 2 }
-      );
-      expect(conflicts.length).toBe(0);
-      
-      // Limited depth to 3 levels should find the difference
-      conflicts = deepCompare.CompareValuesWithConflicts(
-        firstObject, 
-        secondObject, 
-        '', 
-        { maxDepth: 3 }
-      );
-      expect(conflicts.length).toBe(1);
-      expect(conflicts[0]).toBe('level1.level2.level3');
-    });
-  });
-  
   describe('with strict option', () => {
     it('handles special values with non-strict comparison', () => {
       firstObject = {
@@ -303,11 +255,38 @@ describe('Test CompareValuesWithConflicts method', () => {
       };
       
       // With strict=true (default), these are different
-      conflicts = deepCompare.CompareValuesWithConflicts(firstObject, secondObject, '');
-      expect(conflicts.length).toBe(1);
-      expect(conflicts[0]).toBe('nullValue');
+      conflicts = deepCompare.CompareValuesWithConflicts(firstObject, secondObject);
+      expect(conflicts.length).toBe(2);
+      expect(conflicts).toContain('nan');
+      expect(conflicts).toContain('nullValue');
       
-      // With strict=false, null and undefined are considered equal
+      // With strict=false, NaN===NaN and null===undefined
+      conflicts = deepCompare.CompareValuesWithConflicts(
+        firstObject, 
+        secondObject, 
+        '', 
+        { strict: false }
+      );
+      expect(conflicts.length).toBe(0);
+
+      // Test more type coercion cases
+      firstObject = {
+        numStr: '42',
+        boolStr: 'true',
+        emptyStr: ''
+      };
+      
+      secondObject = {
+        numStr: 42,
+        boolStr: true,
+        emptyStr: false
+      };
+      
+      // With strict=true, these are different
+      conflicts = deepCompare.CompareValuesWithConflicts(firstObject, secondObject);
+      expect(conflicts.length).toBe(3);
+      
+      // With strict=false, type coercion makes them equal
       conflicts = deepCompare.CompareValuesWithConflicts(
         firstObject, 
         secondObject, 

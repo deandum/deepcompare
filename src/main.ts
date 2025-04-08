@@ -54,6 +54,24 @@ const areValuesEqual = (a: any, b: any, strict = true): boolean => {
   // Handle null and undefined
   if ((a === null && b === undefined) || (a === undefined && b === null)) return true;
   
+  // Handle type coercion for primitives
+  if (typeof a === 'string' || typeof b === 'string') {
+    // Only try numeric comparison if one is a string and the other is a number
+    if ((typeof a === 'string' && typeof b === 'number') || 
+        (typeof a === 'number' && typeof b === 'string')) {
+      const numA = Number(a);
+      const numB = Number(b);
+      if (!Number.isNaN(numA) && !Number.isNaN(numB) && numA === numB) return true;
+    }
+  }
+  
+  // Handle boolean values
+  if (typeof a === 'boolean' || typeof b === 'boolean') {
+    const boolA = Boolean(a);
+    const boolB = Boolean(b);
+    if (boolA === boolB) return true;
+  }
+  
   // At this point, if one is falsy and the other is not, they're not equal
   if (!a || !b) return false;
   
@@ -120,6 +138,106 @@ const CompareProperties = <T extends Record<string, any>, U extends Record<strin
 };
 
 /**
+ * Handles comparison for arrays and objects
+ * @param firstValue - First value to compare
+ * @param secondValue - Second value to compare
+ * @param currentPath - Current path for conflicts
+ * @param options - Comparison options
+ * @returns Array of conflict paths or boolean indicating equality
+ */
+const handleDepthComparison = (
+  firstValue: any,
+  secondValue: any,
+  currentPath: string,
+  options: ComparisonOptions,
+  isArrayComparison: boolean
+): string[] | boolean => {
+  const { strict = true } = options;
+
+  // Handle Date objects specially
+  if (firstValue instanceof Date && secondValue instanceof Date) {
+    return firstValue.getTime() === secondValue.getTime() ? true : [currentPath];
+  }
+
+  // Handle RegExp objects specially
+  if (firstValue instanceof RegExp && secondValue instanceof RegExp) {
+    return firstValue.toString() === secondValue.toString() ? true : [currentPath];
+  }
+
+  // Handle arrays
+  if (Array.isArray(firstValue) && Array.isArray(secondValue)) {
+    if (firstValue.length !== secondValue.length) {
+      return isArrayComparison ? false : [currentPath];
+    }
+    
+    // When comparing arrays within objects (not direct array comparison)
+    if (!isArrayComparison && currentPath) {
+      for (let i = 0; i < firstValue.length; i++) {
+        const elemResult = handleDepthComparison(
+          firstValue[i],
+          secondValue[i],
+          `${currentPath}[${i}]`,
+          options,
+          true
+        );
+        if (elemResult !== true) {
+          return [currentPath]; // Return the parent array path for conflicts in nested arrays
+        }
+      }
+      return true;
+    }
+    
+    // For direct array comparison or nested arrays in arrays
+    for (let i = 0; i < firstValue.length; i++) {
+      const result = handleDepthComparison(
+        firstValue[i],
+        secondValue[i],
+        `${currentPath}[${i}]`,
+        options,
+        true
+      );
+      if (result !== true) return result;
+    }
+    return true;
+  }
+
+  // Handle objects
+  if (isObject(firstValue) && isObject(secondValue)) {
+    const allKeys = new Set([...Object.keys(firstValue), ...Object.keys(secondValue)]);
+    const conflicts: string[] = [];
+    
+    allKeys.forEach(key => {
+      // If key exists in one but not in the other
+      if (!hasOwn(firstValue, key) || !hasOwn(secondValue, key)) {
+        conflicts.push(currentPath ? `${currentPath}.${key}` : key);
+        return;
+      }
+      
+      const result = handleDepthComparison(
+        firstValue[key],
+        secondValue[key],
+        currentPath ? `${currentPath}.${key}` : key,
+        options,
+        false
+      );
+      
+      if (result !== true) {
+        if (Array.isArray(result)) {
+          conflicts.push(...result);
+        } else if (typeof result === 'string') {
+          conflicts.push(result);
+        }
+      }
+    });
+    
+    return conflicts.length > 0 ? conflicts : true;
+  }
+
+  // Handle primitive values
+  return areValuesEqual(firstValue, secondValue, strict) ? true : [currentPath];
+};
+
+/**
  * Compares two arrays for equality, including nested arrays and objects
  *
  * @param firstArray - First array to compare
@@ -132,68 +250,13 @@ const CompareArrays = (
   secondArray: any[],
   options: ComparisonOptions = {}
 ): boolean => {
-  // Default options
-  const { strict = true, maxDepth = Infinity } = options;
-  
   // Handle falsy cases
-  if (!firstArray || !secondArray) {
+  if (!Array.isArray(firstArray) || !Array.isArray(secondArray)) {
     return false;
   }
 
-  // Must have the same length
-  if (firstArray.length !== secondArray.length) {
-    return false;
-  }
-
-  // Compare each element
-  for (let i = 0; i < firstArray.length; i++) {
-    const firstElement = firstArray[i];
-    const secondElement = secondArray[i];
-    
-    // For arrays, recursively compare if maxDepth allows
-    if (Array.isArray(firstElement) && Array.isArray(secondElement)) {
-      if (maxDepth <= 1) {
-        // At max depth, just check reference equality
-        if (firstElement !== secondElement) return false;
-      } else {
-        // Recursively compare arrays with decreased depth
-        if (!CompareArrays(firstElement, secondElement, {
-          ...options,
-          maxDepth: maxDepth === Infinity ? Infinity : maxDepth - 1
-        })) {
-          return false;
-        }
-      }
-    } 
-    // For objects (but not arrays), do a deep comparison
-    else if (isObject(firstElement) && isObject(secondElement)) {
-      if (maxDepth <= 1) {
-        // At max depth, just check reference equality
-        if (firstElement !== secondElement) return false;
-      } else {
-        // Compare objects with decreased depth
-        const conflicts = CompareValuesWithConflicts(
-          firstElement, 
-          secondElement,
-          '', 
-          {
-            ...options,
-            maxDepth: maxDepth === Infinity ? Infinity : maxDepth - 1
-          }
-        );
-        
-        if (conflicts.length > 0) return false;
-      }
-    } 
-    // For primitive values or different types
-    else {
-      if (!areValuesEqual(firstElement, secondElement, strict)) {
-        return false;
-      }
-    }
-  }
-
-  return true;
+  // Use the unified depth handling function
+  return handleDepthComparison(firstArray, secondArray, '', options, true) === true;
 };
 
 /**
@@ -212,128 +275,99 @@ const CompareValuesWithConflicts = <T extends Record<string, any>, U extends Rec
   pathOfConflict: string = '',
   options: ComparisonOptions = {}
 ): string[] => {
-  // Default options
-  const { strict = true, maxDepth = Infinity } = options;
-  
-  // If we've reached max depth, stop recursion and return no conflicts
-  if (maxDepth <= 0) return [];
-  
-  let conflicts: string[] = [];
-  const currentDepth = maxDepth === Infinity ? Infinity : maxDepth - 1;
-
-  // First handle case where objects have different keys
-  if (Object.keys(firstObject).length !== Object.keys(secondObject).length) {
-    const result = CompareProperties(firstObject, secondObject);
-    
-    // Add differences to conflicts
-    result.differences.forEach(diff => {
-      const conflictPath = isEmpty(pathOfConflict) ? diff : `${pathOfConflict}.${diff}`;
-      conflicts.push(conflictPath);
-    });
-    
-    // For deeper checks, focus only on common properties
-    if (currentDepth > 0) {
-      const firstFiltered = pick(firstObject, result.common);
-      const secondFiltered = pick(secondObject, result.common);
-      
-      // Only continue if we have common properties to check
-      if (Object.keys(firstFiltered).length > 0) {
-        const deeperConflicts = processObjectProperties(
-          firstFiltered,
-          secondFiltered,
-          pathOfConflict,
-          { strict, maxDepth: currentDepth }
-        );
-        
-        conflicts = conflicts.concat(deeperConflicts);
-      }
-    }
-    
-    return conflicts;
-  }
-  
-  // If objects have same keys, process all properties
-  return processObjectProperties(
-    firstObject,
-    secondObject,
-    pathOfConflict,
-    { strict, maxDepth: currentDepth }
-  );
+  // Use the unified depth handling function
+  const conflicts = handleDepthComparison(firstObject, secondObject, pathOfConflict, options, false);
+  return Array.isArray(conflicts) ? conflicts : [];
 };
 
 /**
- * Helper function to process object properties and find conflicts
- * @param firstObject - First object to compare
- * @param secondObject - Second object to compare
- * @param basePath - Base path for conflicts
- * @param options - Comparison options
- * @returns Array of conflict paths
+ * Creates a memoized version of a function
+ * @param fn - Function to memoize
+ * @param keyFn - Optional custom function to generate cache keys
+ * @returns Memoized version of the function
  */
-const processObjectProperties = <T extends Record<string, any>, U extends Record<string, any>>(
+const memoize = <T extends (...args: any[]) => any>(
+  fn: T,
+  keyFn?: (...args: Parameters<T>) => string
+): T => {
+  const cache = new Map<string, ReturnType<T>>();
+  
+  return ((...args: Parameters<T>): ReturnType<T> => {
+    // Create a cache key from the arguments
+    const key = keyFn 
+      ? keyFn(...args) 
+      : JSON.stringify(args);
+    
+    // Check if result is in cache
+    if (cache.has(key)) {
+      return cache.get(key) as ReturnType<T>;
+    }
+    
+    // Call the original function
+    const result = fn(...args);
+    
+    // Store result in cache
+    cache.set(key, result);
+    
+    return result;
+  }) as T;
+};
+
+/**
+ * Generate a cache key for CompareProperties
+ */
+const comparePropertiesKeyFn = <T extends Record<string, any>, U extends Record<string, any>>(
+  firstObject: T,
+  secondObject: U
+): string => {
+  return JSON.stringify([
+    Object.keys(firstObject).sort(),
+    Object.keys(secondObject).sort()
+  ]);
+};
+
+/**
+ * Generate a cache key for CompareValuesWithConflicts
+ */
+const compareValuesWithConflictsKeyFn = <T extends Record<string, any>, U extends Record<string, any>>(
   firstObject: T,
   secondObject: U,
-  basePath: string = '',
+  pathOfConflict: string = '',
   options: ComparisonOptions = {}
-): string[] => {
-  // Default options
-  const { strict = true, maxDepth = Infinity } = options;
-  
-  const conflicts: string[] = [];
-  
-  // Process each property in the first object
-  for (const [key, value] of Object.entries(firstObject)) {
-    // Skip if the second object doesn't have this property
-    if (!hasOwn(secondObject, key)) continue;
-    
-    // Build the conflict path for this property
-    const conflictPath = isEmpty(basePath) ? key : `${basePath}.${key}`;
-    
-    // Check different types of values
-    if (isObject(value) && isObject(secondObject[key])) {
-      // Process nested object only if we haven't reached max depth
-      if (maxDepth > 0) {
-        const nestedConflicts = CompareValuesWithConflicts(
-          value,
-          secondObject[key],
-          conflictPath,
-          {
-            strict,
-            maxDepth: maxDepth === Infinity ? Infinity : maxDepth - 1
-          }
-        );
-        
-        if (nestedConflicts.length > 0) {
-          conflicts.push(...nestedConflicts);
-        }
-      } else if (value !== secondObject[key]) {
-        // At max depth, just check reference equality
-        conflicts.push(conflictPath);
-      }
-    }
-    else if (Array.isArray(value)) {
-      // Check if second value is also an array
-      if (!Array.isArray(secondObject[key])) {
-        conflicts.push(conflictPath);
-      } 
-      // Compare arrays
-      else if (!CompareArrays(value, secondObject[key], {
-        strict,
-        maxDepth: maxDepth === Infinity ? Infinity : maxDepth - 1
-      })) {
-        conflicts.push(conflictPath);
-      }
-    }
-    // For primitive values
-    else if (!areValuesEqual(value, secondObject[key], strict)) {
-      conflicts.push(conflictPath);
-    }
-  }
-  
-  return conflicts;
+): string => {
+  // Include path and options in the cache key
+  return JSON.stringify([
+    firstObject,
+    secondObject,
+    pathOfConflict,
+    options
+  ]);
 };
+
+/**
+ * Memoized version of CompareProperties
+ */
+const MemoizedCompareProperties = memoize(CompareProperties, comparePropertiesKeyFn);
+
+/**
+ * Memoized version of CompareArrays
+ */
+const MemoizedCompareArrays = memoize(CompareArrays);
+
+/**
+ * Memoized version of CompareValuesWithConflicts
+ */
+const MemoizedCompareValuesWithConflicts = memoize(
+  CompareValuesWithConflicts, 
+  compareValuesWithConflictsKeyFn
+);
 
 export {
   CompareProperties,
   CompareArrays,
   CompareValuesWithConflicts,
+  MemoizedCompareProperties,
+  MemoizedCompareArrays,
+  MemoizedCompareValuesWithConflicts,
+  memoize
 }; 

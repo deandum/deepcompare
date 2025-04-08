@@ -12,7 +12,6 @@ All notable changes to the object-deep-compare project will be documented in thi
 ### Added
 - **TypeScript type definitions** - Full type definitions for all functions and interfaces
 - **New configuration options**:
-  - `maxDepth`: Control how deep the comparison traverses (prevents stack overflows)
   - `strict`: Toggle between strict and loose equality checks
 - **Special value handling**:
   - Proper comparison for `NaN`, `null`, and `undefined` values

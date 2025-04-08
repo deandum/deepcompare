@@ -69,34 +69,8 @@ describe('Test CompareArrays method', () => {
     });
   });
   
-  describe('with maxDepth option', () => {
-    it('limits comparison depth for nested arrays', () => {
-      // Arrays that differ at a deep level
-      firstArray = [1, [2, [3, 4]]];
-      secondArray = [1, [2, [3, 5]]];
-      
-      // Regular comparison should find the difference
-      expect(deepCompare.CompareArrays(firstArray, secondArray)).toBe(false);
-      
-      // With maxDepth=2, it won't compare the inner arrays (will only compare up to [2, ...])
-      expect(deepCompare.CompareArrays(firstArray, secondArray, { maxDepth: 2 })).toBe(true);
-    });
-    
-    it('limits comparison depth for nested objects in arrays', () => {
-      // Arrays with objects that differ at a deep level
-      firstArray = [1, { nested: { deep: 42 } }];
-      secondArray = [1, { nested: { deep: 43 } }];
-      
-      // Regular comparison should find the difference
-      expect(deepCompare.CompareArrays(firstArray, secondArray)).toBe(false);
-      
-      // With maxDepth=2, it won't compare the inner object properties
-      expect(deepCompare.CompareArrays(firstArray, secondArray, { maxDepth: 2 })).toBe(true);
-    });
-  });
-  
   describe('with strict option', () => {
-    it('allows loose comparison when strict is disabled', () => {
+    it('handles type coercion when strict is disabled', () => {
       // String and number that are equal in loose comparison
       firstArray = ['1', 2];
       secondArray = [1, '2'];
@@ -104,8 +78,18 @@ describe('Test CompareArrays method', () => {
       // With strict=true (default), these are different
       expect(deepCompare.CompareArrays(firstArray, secondArray)).toBe(false);
       
-      // With strict=false, these are considered equal
-      expect(deepCompare.CompareArrays(firstArray, secondArray, { strict: false })).toBe(false); // Still false because we don't implement loose comparison for primitives
+      // With strict=false, these are equal due to type coercion
+      expect(deepCompare.CompareArrays(firstArray, secondArray, { strict: false })).toBe(true);
+      
+      // Test more type coercion cases
+      firstArray = ['42', true];
+      secondArray = [42, '1'];
+      expect(deepCompare.CompareArrays(firstArray, secondArray, { strict: false })).toBe(true);
+      
+      // Different values should still be different even with type coercion
+      firstArray = ['43', true];
+      secondArray = [42, '1'];
+      expect(deepCompare.CompareArrays(firstArray, secondArray, { strict: false })).toBe(false);
     });
     
     it('handles special values correctly', () => {
@@ -118,6 +102,15 @@ describe('Test CompareArrays method', () => {
       
       // With strict=false, NaN===NaN and null===undefined
       expect(deepCompare.CompareArrays(firstArray, secondArray, { strict: false })).toBe(true);
+      
+      // Test more special cases
+      firstArray = [Infinity, -0];
+      secondArray = [Infinity, 0];
+      expect(deepCompare.CompareArrays(firstArray, secondArray)).toBe(true); // These are always equal
+      
+      firstArray = [new Date('2023-01-01'), /abc/];
+      secondArray = [new Date('2023-01-01'), /abc/];
+      expect(deepCompare.CompareArrays(firstArray, secondArray)).toBe(true);
     });
   });
 }); 

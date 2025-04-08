@@ -11,7 +11,6 @@ A type-safe collection of comparison methods for objects and arrays in TypeScrip
 
 - **Type-safe**: Written in TypeScript with full type definitions
 - **Zero dependencies**: No external dependencies required
-- **Configurable comparison depth**: Control how deep the comparison goes with the `maxDepth` option
 - **Flexible equality**: Choose between strict and loose equality with the `strict` option
 - **Special value support**: Correctly handles comparison of special values like `NaN`, `null`, and `undefined`
 - **Date object support**: Properly compares Date objects based on their time values
@@ -85,7 +84,6 @@ This method compares two arrays for equality. It returns true or false.
 - `firstArray` - First array to compare
 - `secondArray` - Second array to compare
 - `options` (optional) - Comparison options
-  - `maxDepth` - Maximum depth to traverse when comparing nested arrays/objects (default: Infinity)
   - `strict` - Whether to use strict equality (===) for comparing values (default: true)
 
 #### Returns:
@@ -103,12 +101,12 @@ console.log(isEqual); // true
 const deepArray1 = [1, [2, [3, 4]]];
 const deepArray2 = [1, [2, [3, 5]]];
 
-const isEqualWithDepth = objectDeepCompare.CompareArrays(
+const isEqualWithStrict = objectDeepCompare.CompareArrays(
 	deepArray1,
 	deepArray2,
-	{ maxDepth: 2 }
+	{ strict: true }
 );
-console.log(isEqualWithDepth); // true (because it only compares up to depth 2)
+console.log(isEqualWithStrict); // false
 ```
 
 ### `CompareValuesWithConflicts`
@@ -119,7 +117,6 @@ This method performs a deep comparison of two objects and returns an array of pa
 - `secondObject` - Second object to compare
 - `pathOfConflict` (optional) - Starting path for conflict (default: '')
 - `options` (optional) - Comparison options
-  - `maxDepth` - Maximum depth to traverse when comparing nested objects (default: Infinity)
   - `strict` - Whether to use strict equality (===) for comparing values (default: true)
 
 #### Returns:
@@ -150,13 +147,13 @@ Will return: ['nested.foo', 'nested.bar']
 const deepObject1 = { level1: { level2: { level3: { value: 42 } } } };
 const deepObject2 = { level1: { level2: { level3: { value: 43 } } } };
 
-const conflictsWithDepth = objectDeepCompare.CompareValuesWithConflicts(
+const conflictsWithStrict = objectDeepCompare.CompareValuesWithConflicts(
 	deepObject1,
 	deepObject2,
 	'',
-	{ maxDepth: 2 }
+	{ strict: true }
 );
-console.log(conflictsWithDepth); // [] (because it only compares up to depth 2)
+console.log(conflictsWithStrict); // ['level1.level2.level3.value']
 ```
 
 ## Advanced Usage
@@ -204,6 +201,65 @@ console.log(isEqual); // true
 
 const isNotEqual = objectDeepCompare.CompareArrays(regex1, regex3);
 console.log(isNotEqual); // false
+```
+
+## Memoized Functions
+
+The library provides memoized versions of all comparison functions for improved performance when comparing the same objects multiple times. Memoization caches the results of function calls based on their arguments, avoiding redundant computations.
+
+### `MemoizedCompareProperties`
+Memoized version of `CompareProperties` that caches results based on object references.
+
+```ts
+const obj1 = { a: 1, b: 2 };
+const obj2 = { a: 1, c: 3 };
+
+// First call computes the result
+const result1 = objectDeepCompare.MemoizedCompareProperties(obj1, obj2);
+// Second call with same objects returns cached result
+const result2 = objectDeepCompare.MemoizedCompareProperties(obj1, obj2);
+```
+
+### `MemoizedCompareArrays`
+Memoized version of `CompareArrays` that caches results based on array references and options.
+
+```ts
+const arr1 = [1, 2, 3];
+const arr2 = [1, 2, 3];
+const options = { strict: true };
+
+// First call computes the result
+const result1 = objectDeepCompare.MemoizedCompareArrays(arr1, arr2, options);
+// Second call with same arrays and options returns cached result
+const result2 = objectDeepCompare.MemoizedCompareArrays(arr1, arr2, options);
+```
+
+### `MemoizedCompareValuesWithConflicts`
+Memoized version of `CompareValuesWithConflicts` that caches results based on object references, path, and options.
+
+```ts
+const obj1 = { nested: { value: 1 } };
+const obj2 = { nested: { value: 2 } };
+const path = '';
+const options = { strict: true };
+
+// First call computes the result
+const result1 = objectDeepCompare.MemoizedCompareValuesWithConflicts(obj1, obj2, path, options);
+// Second call with same parameters returns cached result
+const result2 = objectDeepCompare.MemoizedCompareValuesWithConflicts(obj1, obj2, path, options);
+```
+
+### `memoize` Utility
+A generic memoization utility function that can be used to memoize any function.
+
+```ts
+const myFunction = (a: number, b: number) => a + b;
+const memoizedFn = objectDeepCompare.memoize(myFunction);
+
+// First call computes the result
+const result1 = memoizedFn(1, 2);
+// Second call with same arguments returns cached result
+const result2 = memoizedFn(1, 2);
 ```
 
 ## Dependencies
