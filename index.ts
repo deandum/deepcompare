@@ -1,6 +1,7 @@
 import * as objectDeepCompare from './src/main';
 import { ComparisonOptions, DetailedDifference, CircularReferenceHandling, PathFilter, PathFilterMode,
-  TypedComparisonResult, TypedDetailedDifference, TypeSafeComparisonOptions, CompatibleObject } from './src/types';
+  TypedComparisonResult, TypedDetailedDifference, TypeSafeComparisonOptions, CompatibleObject,
+  SchemaValidation, SchemaValidationResult } from './src/types';
 
 /**
  * Compares the properties of two objects and returns their differences and commonalities
@@ -23,7 +24,7 @@ const CompareProperties = <T extends Record<string, any>, U extends Record<strin
  * 
  * @param firstArray - First array to compare
  * @param secondArray - Second array to compare
- * @param options - Optional comparison options (strict, circularReferences, pathFilter)
+ * @param options - Optional comparison options (strict, circularReferences, pathFilter, schemaValidation)
  * @returns Boolean indicating if arrays are equal
  */
 const CompareArrays = (
@@ -40,7 +41,7 @@ const CompareArrays = (
  * @param firstObject - First object to compare
  * @param secondObject - Second object to compare
  * @param pathOfConflict - Starting path for conflict (optional)
- * @param options - Optional comparison options (strict, circularReferences, pathFilter)
+ * @param options - Optional comparison options (strict, circularReferences, pathFilter, schemaValidation)
  * @returns Array of conflict paths or null if inputs are invalid
  */
 const CompareValuesWithConflicts = <T extends Record<string, any>, U extends Record<string, any>>(
@@ -66,7 +67,7 @@ const CompareValuesWithConflicts = <T extends Record<string, any>, U extends Rec
  * @param firstObject - First object to compare
  * @param secondObject - Second object to compare
  * @param pathOfConflict - Starting path for conflict (optional)
- * @param options - Optional comparison options (strict, circularReferences, pathFilter)
+ * @param options - Optional comparison options (strict, circularReferences, pathFilter, schemaValidation)
  * @returns Array of detailed differences or null if inputs are invalid
  */
 const CompareValuesWithDetailedDifferences = <T extends Record<string, any>, U extends Record<string, any>>(
@@ -90,7 +91,7 @@ const CompareValuesWithDetailedDifferences = <T extends Record<string, any>, U e
  * 
  * @param firstArray - First array to compare
  * @param secondArray - Second array to compare
- * @param options - Optional comparison options
+ * @param options - Optional comparison options (strict, circularReferences, pathFilter, schemaValidation)
  * @returns Object with isEqual flag and type information
  */
 const TypeSafeCompareArrays = <T extends unknown[], U extends unknown[]>(
@@ -106,7 +107,7 @@ const TypeSafeCompareArrays = <T extends unknown[], U extends unknown[]>(
  * 
  * @param firstObject - First object to compare
  * @param secondObject - Second object to compare
- * @param options - Type-safe comparison options
+ * @param options - Type-safe comparison options (propertyMapping, includeTypeInfo, schemaValidation)
  * @returns Object with isEqual flag and type information
  */
 const TypeSafeCompareObjects = <T extends Record<string, unknown>, U extends Record<string, unknown>>(
@@ -124,7 +125,7 @@ const TypeSafeCompareObjects = <T extends Record<string, unknown>, U extends Rec
  * 
  * @param firstObject - First object to compare
  * @param secondObject - Second object to compare
- * @param options - Type-safe comparison options
+ * @param options - Type-safe comparison options (propertyMapping, includeTypeInfo, schemaValidation)
  * @returns Array of typed detailed differences or null if inputs are invalid
  */
 const TypeSafeCompareValuesWithDetailedDifferences = <T extends Record<string, unknown>, U extends Record<string, unknown>>(
@@ -143,7 +144,7 @@ const TypeSafeCompareValuesWithDetailedDifferences = <T extends Record<string, u
  * 
  * @param firstObject - First object to compare
  * @param secondObject - Second object to compare
- * @param options - Optional comparison options
+ * @param options - Optional comparison options (strict, circularReferences, pathFilter, schemaValidation)
  * @returns Type predicate indicating if the objects are equal
  */
 const ObjectsAreEqual = <T extends Record<string, unknown>, U extends Record<string, unknown>>(
@@ -162,7 +163,7 @@ const ObjectsAreEqual = <T extends Record<string, unknown>, U extends Record<str
  * 
  * @param firstObject - Object to check against
  * @param secondObject - Object that should be a subset
- * @param options - Optional comparison options
+ * @param options - Optional comparison options (strict, circularReferences, pathFilter, schemaValidation)
  * @returns Boolean indicating if secondObject is a subset of firstObject
  */
 const IsSubset = <T extends Record<string, unknown>, U extends Record<string, unknown>>(
@@ -193,6 +194,30 @@ const GetCommonStructure = <T extends Record<string, unknown>, U extends Record<
   return objectDeepCompare.GetCommonStructure(firstObject, secondObject);
 };
 
+/**
+ * Validates objects against schemas
+ * 
+ * @param firstObject - First object to validate
+ * @param secondObject - Second object to validate
+ * @param schemaValidation - Schema validation options 
+ * @returns Validation result with information about validation status and errors
+ */
+const ValidateObjectsAgainstSchemas = <T extends Record<string, unknown>, U extends Record<string, unknown>>(
+  firstObject: T | null | undefined,
+  secondObject: U | null | undefined,
+  schemaValidation: SchemaValidation
+) => {
+  if (!firstObject || !secondObject) {
+    return {
+      firstObjectValid: !firstObject ? false : true,
+      secondObjectValid: !secondObject ? false : true,
+      firstObjectErrors: !firstObject ? ['First object is null or undefined'] : undefined,
+      secondObjectErrors: !secondObject ? ['Second object is null or undefined'] : undefined
+    };
+  }
+  return objectDeepCompare.validateObjectsAgainstSchemas(firstObject, secondObject, schemaValidation);
+};
+
 export {
   CompareProperties,
   CompareArrays,
@@ -204,6 +229,7 @@ export {
   ObjectsAreEqual,
   IsSubset,
   GetCommonStructure,
+  ValidateObjectsAgainstSchemas,
   DetailedDifference,
   TypedDetailedDifference,
   TypedComparisonResult,
@@ -212,5 +238,7 @@ export {
   CircularReferenceHandling,
   PathFilter,
   PathFilterMode,
+  SchemaValidation,
+  SchemaValidationResult,
   CompatibleObject
 }; 

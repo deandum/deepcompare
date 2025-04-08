@@ -1,3 +1,92 @@
+# object-deep-compare v2.4.0 Release Notes
+
+We're excited to announce the release of version 2.4.0 of object-deep-compare, which introduces schema validation to ensure objects match expected structures before comparison.
+
+## What's New
+
+### Schema Validation
+
+The major new feature in this release is the ability to validate objects against schemas before comparison:
+
+- **Schema Definition**:
+  - Define expected types for each property using strings: 'string', 'number', 'boolean', etc.
+  - Nest objects to validate complex structures
+  - Validate arrays using 'array<type>' notation or array items using schemas
+  - Use 'any' type to skip type checking for specific properties
+
+- **Integration with Comparison Functions**:
+  - All comparison functions now accept a `schemaValidation` option
+  - Can be configured to throw errors or simply return validation results
+  - Works with both simple and complex object structures
+
+- **Standalone Validation**:
+  - New `ValidateObjectsAgainstSchemas` function for validation without comparison
+  - Returns detailed validation results including error messages
+  - Useful for quick type checking of objects in TypeScript/JavaScript
+
+This feature is particularly valuable for:
+- Catching type errors early in the comparison process
+- Ensuring objects meet expected formats
+- Validating API responses before comparison
+- Adding type safety to dynamic objects
+
+## Usage Examples
+
+### Basic Schema Validation
+
+```ts
+import { CompareValuesWithDetailedDifferences, SchemaValidation } from 'object-deep-compare';
+
+// Define schema
+const userSchema = {
+  id: 'string',
+  name: 'string',
+  age: 'number',
+  isActive: 'boolean',
+  metadata: {
+    createdAt: 'string',
+    tags: 'array<string>'
+  }
+};
+
+// Set up validation options
+const schemaValidation: SchemaValidation = {
+  firstObjectSchema: userSchema,
+  secondObjectSchema: userSchema,
+  throwOnValidationFailure: false // Continue comparison even if validation fails
+};
+
+// Compare with schema validation
+const differences = CompareValuesWithDetailedDifferences(
+  user1, 
+  user2, 
+  '', 
+  { schemaValidation }
+);
+```
+
+### Validation Only
+
+```ts
+import { ValidateObjectsAgainstSchemas, SchemaValidation } from 'object-deep-compare';
+
+const schema = {
+  id: 'string',
+  items: 'array<object>'
+};
+
+const validationOptions: SchemaValidation = {
+  firstObjectSchema: schema,
+  throwOnValidationFailure: false
+};
+
+const result = ValidateObjectsAgainstSchemas(data, {}, validationOptions);
+console.log(result.firstObjectValid); // true/false
+console.log(result.firstObjectErrors); // Array of validation error messages
+```
+
+For more details, see the updated [README.md](README.md) and [CHANGELOG.md](CHANGELOG.md).
+
 # object-deep-compare v2.0.0 Release Notes
 
 We're excited to announce the release of version 2.0.0 of object-deep-compare, a complete rewrite in TypeScript with significant improvements.

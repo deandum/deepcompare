@@ -2,6 +2,18 @@
 
 All notable changes to the object-deep-compare project will be documented in this file.
 
+## [2.4.0] - 2024-04-08
+
+### Added
+- **Schema Validation**:
+  - New `schemaValidation` option in ComparisonOptions to validate objects against schemas before comparison
+  - Support for validating both simple and complex nested object structures
+  - Schema definition for validating object property types and presence
+  - Array validation including support for array items validation
+  - New `SchemaValidation` and `SchemaValidationResult` types for configuring and receiving validation results
+  - New `ValidateObjectsAgainstSchemas` function for standalone schema validation
+  - Added examples in documentation showing how to use schema validation for type checking
+
 ## [2.3.0] - 2024-04-08
 
 ### Added

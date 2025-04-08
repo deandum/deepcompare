@@ -1,6 +1,175 @@
 import { ComparePropertiesResult, ComparisonOptions, DetailedDifference, DifferenceType, PathFilter, PathFilterMode, 
   isObjectGuard, isArrayGuard, isDateGuard, isRegExpGuard, TypeSafeComparisonOptions, TypedComparisonResult, 
-  TypedDetailedDifference, CompatibleObject } from './types';
+  TypedDetailedDifference, CompatibleObject, SchemaValidation, SchemaValidationResult } from './types';
+
+/**
+ * Schema Validation Error thrown when schema validation fails and throwOnValidationFailure is true
+ */
+class SchemaValidationError extends Error {
+  constructor(message: string, public validationResult: SchemaValidationResult) {
+    super(message);
+    this.name = 'SchemaValidationError';
+  }
+}
+
+/**
+ * Validates an object against a schema
+ * @param obj - Object to validate
+ * @param schema - Schema to validate against
+ * @param path - Current path (used for error messages)
+ * @returns Array of validation error messages
+ */
+const validateObjectAgainstSchema = (
+  obj: Record<string, unknown>, 
+  schema: Record<string, unknown>, 
+  path: string = ''
+): string[] => {
+  const errors: string[] = [];
+  
+  // Check all schema properties against the object
+  for (const key in schema) {
+    const currentPath = path ? `${path}.${key}` : key;
+    
+    // Check if property exists
+    if (!hasOwn(obj, key)) {
+      errors.push(`Missing required property: ${currentPath}`);
+      continue;
+    }
+    
+    const schemaValue = schema[key];
+    const objValue = obj[key];
+    
+    // Check property type
+    if (typeof schemaValue === 'string') {
+      // String values in schema represent type constraints
+      const expectedType = schemaValue as string;
+      
+      if (expectedType === 'any') {
+        // Skip type checking for 'any'
+        continue;
+      }
+      
+      // Handle special array type notation: 'array<string>', 'array<number>', etc.
+      if (expectedType.startsWith('array<') && expectedType.endsWith('>')) {
+        if (!Array.isArray(objValue)) {
+          errors.push(`Property ${currentPath} should be an array but got ${typeof objValue}`);
+          continue;
+        }
+        
+        // Extract the array item type
+        const itemType = expectedType.substring(6, expectedType.length - 1);
+        
+        // Validate array items if needed
+        for (let i = 0; i < (objValue as any[]).length; i++) {
+          const item = (objValue as any[])[i];
+          if (typeof item !== itemType && itemType !== 'any') {
+            errors.push(`Array item ${currentPath}[${i}] should be of type ${itemType} but got ${typeof item}`);
+          }
+        }
+        continue;
+      }
+      
+      // Check primitive types
+      if (typeof objValue !== expectedType && expectedType !== 'any') {
+        errors.push(`Property ${currentPath} should be of type ${expectedType} but got ${typeof objValue}`);
+      }
+    }
+    else if (isObjectGuard(schemaValue) && !isEmpty(schemaValue)) {
+      // For nested objects, recursively validate
+      if (isObjectGuard(objValue)) {
+        const nestedErrors = validateObjectAgainstSchema(objValue, schemaValue, currentPath);
+        errors.push(...nestedErrors);
+      } else {
+        errors.push(`Property ${currentPath} should be an object but got ${typeof objValue}`);
+      }
+    }
+    else if (Array.isArray(schemaValue)) {
+      // Array schema - check that the value is an array
+      if (!Array.isArray(objValue)) {
+        errors.push(`Property ${currentPath} should be an array but got ${typeof objValue}`);
+        continue;
+      }
+      
+      // If the schema array has a single item, it's a schema for all items
+      if (schemaValue.length === 1 && isObjectGuard(schemaValue[0])) {
+        const itemSchema = schemaValue[0];
+        // Check each array item against the item schema
+        for (let i = 0; i < (objValue as any[]).length; i++) {
+          const item = (objValue as any[])[i];
+          if (isObjectGuard(item)) {
+            const nestedErrors = validateObjectAgainstSchema(
+              item, 
+              itemSchema as Record<string, unknown>, 
+              `${currentPath}[${i}]`
+            );
+            errors.push(...nestedErrors);
+          } else {
+            errors.push(`Array item ${currentPath}[${i}] should be an object but got ${typeof item}`);
+          }
+        }
+      }
+    }
+  }
+  
+  return errors;
+};
+
+/**
+ * Validates objects against schemas based on schema validation options
+ * @param firstObject - First object to validate
+ * @param secondObject - Second object to validate
+ * @param schemaValidation - Schema validation options
+ * @returns Validation result with any errors
+ */
+const validateObjectsAgainstSchemas = <T extends Record<string, unknown>, U extends Record<string, unknown>>(
+  firstObject: T,
+  secondObject: U,
+  schemaValidation: SchemaValidation
+): SchemaValidationResult => {
+  const result: SchemaValidationResult = {
+    firstObjectValid: true,
+    secondObjectValid: true
+  };
+  
+  // Validate first object if schema is provided
+  if (schemaValidation.firstObjectSchema) {
+    const firstObjectErrors = validateObjectAgainstSchema(
+      firstObject,
+      schemaValidation.firstObjectSchema
+    );
+    
+    if (firstObjectErrors.length > 0) {
+      result.firstObjectValid = false;
+      result.firstObjectErrors = firstObjectErrors;
+    }
+  }
+  
+  // Validate second object if schema is provided
+  if (schemaValidation.secondObjectSchema) {
+    const secondObjectErrors = validateObjectAgainstSchema(
+      secondObject,
+      schemaValidation.secondObjectSchema
+    );
+    
+    if (secondObjectErrors.length > 0) {
+      result.secondObjectValid = false;
+      result.secondObjectErrors = secondObjectErrors;
+    }
+  }
+  
+  // If throwOnValidationFailure is true and any validation failed, throw an error
+  if (schemaValidation.throwOnValidationFailure && 
+      (!result.firstObjectValid || !result.secondObjectValid)) {
+    const errorMsg = `Schema validation failed: ${
+      !result.firstObjectValid ? 'First object has validation errors. ' : ''
+    }${
+      !result.secondObjectValid ? 'Second object has validation errors.' : ''
+    }`;
+    throw new SchemaValidationError(errorMsg, result);
+  }
+  
+  return result;
+};
 
 /**
  * Error thrown when a circular reference is detected and handling is set to 'error'
@@ -745,12 +914,12 @@ const handleDepthComparison = (
 };
 
 /**
- * Compares two arrays for equality, including nested arrays and objects
- *
+ * Compares two arrays and returns whether they are equal
+ * 
  * @param firstArray - First array to compare
  * @param secondArray - Second array to compare
- * @param options - Comparison options
- * @return Boolean indicating whether arrays are equal
+ * @param options - Optional comparison options (strict, circularReferences, pathFilter)
+ * @returns True if arrays are equal, false otherwise
  */
 const CompareArrays = (
   firstArray: any[], 
@@ -760,6 +929,33 @@ const CompareArrays = (
   // Handle falsy cases
   if (!Array.isArray(firstArray) || !Array.isArray(secondArray)) {
     return false;
+  }
+
+  // Perform schema validation if specified
+  if (options.schemaValidation) {
+    // Convert arrays to objects for schema validation if schemas are provided
+    if (options.schemaValidation.firstObjectSchema || options.schemaValidation.secondObjectSchema) {
+      const firstObject = { items: firstArray };
+      const secondObject = { items: secondArray };
+      
+      // Wrap the array schemas inside an object with 'items' property
+      const wrappedFirstSchema = options.schemaValidation.firstObjectSchema 
+        ? { items: [options.schemaValidation.firstObjectSchema] } 
+        : undefined;
+      
+      const wrappedSecondSchema = options.schemaValidation.secondObjectSchema 
+        ? { items: [options.schemaValidation.secondObjectSchema] } 
+        : undefined;
+      
+      const wrappedSchemaValidation: SchemaValidation = {
+        firstObjectSchema: wrappedFirstSchema,
+        secondObjectSchema: wrappedSecondSchema,
+        throwOnValidationFailure: options.schemaValidation.throwOnValidationFailure
+      };
+      
+      // Run the schema validation
+      validateObjectsAgainstSchemas(firstObject, secondObject, wrappedSchemaValidation);
+    }
   }
 
   // Extract options
@@ -817,8 +1013,31 @@ const CompareValuesWithConflicts = <T extends Record<string, any>, U extends Rec
   pathOfConflict: string = '',
   options: ComparisonOptions = {}
 ): string[] => {
+  // Perform schema validation if specified
+  if (options.schemaValidation) {
+    validateObjectsAgainstSchemas(firstObject, secondObject, options.schemaValidation);
+  }
+  
+  return _CompareValuesWithConflicts(
+    firstObject, 
+    secondObject, 
+    pathOfConflict, 
+    options
+  );
+};
+
+/**
+ * Internal implementation of CompareValuesWithConflicts
+ * This is separated to allow for memoization
+ */
+const _CompareValuesWithConflicts = <T extends Record<string, any>, U extends Record<string, any>>(
+  firstObject: T,
+  secondObject: U,
+  pathOfConflict: string = '',
+  options: ComparisonOptions = {}
+): string[] => {
   // Extract options
-  const { circularReferences = 'error', pathFilter } = options;
+  const { circularReferences = 'error', pathFilter, strict = true } = options;
 
   // If the objects are the same reference, there are no conflicts
   if (Object.is(firstObject, secondObject)) {
@@ -891,16 +1110,38 @@ const CompareValuesWithConflicts = <T extends Record<string, any>, U extends Rec
 };
 
 /**
- * Compares the properties of two objects (deep comparison)
- * Returns detailed information about differences including type and values
- *
+ * Compares two objects and returns detailed information about differences
+ * 
  * @param firstObject - First object to compare
  * @param secondObject - Second object to compare
- * @param pathOfConflict - Starting path for conflict (used in recursion)
- * @param options - Comparison options
- * @return Array of detailed differences
+ * @param pathOfConflict - Starting path for conflict (optional)
+ * @param options - Optional comparison options (strict, circularReferences, pathFilter)
+ * @returns Array of detailed differences
  */
 const CompareValuesWithDetailedDifferences = <T extends Record<string, any>, U extends Record<string, any>>(
+  firstObject: T,
+  secondObject: U,
+  pathOfConflict: string = '',
+  options: ComparisonOptions = {}
+): DetailedDifference[] => {
+  // Perform schema validation if specified
+  if (options.schemaValidation) {
+    validateObjectsAgainstSchemas(firstObject, secondObject, options.schemaValidation);
+  }
+  
+  return _CompareValuesWithDetailedDifferences(
+    firstObject, 
+    secondObject, 
+    pathOfConflict, 
+    options
+  );
+};
+
+/**
+ * Internal implementation of CompareValuesWithDetailedDifferences
+ * This is separated to allow for memoization
+ */
+const _CompareValuesWithDetailedDifferences = <T extends Record<string, any>, U extends Record<string, any>>(
   firstObject: T,
   secondObject: U,
   pathOfConflict: string = '',
@@ -1341,11 +1582,11 @@ const getTypeName = (value: unknown): string => {
 };
 
 /**
- * Type-safe version of CompareArrays that includes type information in the result
+ * Type-safe comparison of arrays that includes type information
  * 
  * @param firstArray - First array to compare
  * @param secondArray - Second array to compare
- * @param options - Optional comparison options (strict, circularReferences, pathFilter)
+ * @param options - Optional comparison options (strict, circularReferences)
  * @returns Object with isEqual flag and type information
  */
 const TypeSafeCompareArrays = <T extends unknown[], U extends unknown[]>(
@@ -1353,12 +1594,39 @@ const TypeSafeCompareArrays = <T extends unknown[], U extends unknown[]>(
   secondArray: U,
   options: ComparisonOptions = {}
 ): TypedComparisonResult<T, U> => {
+  // Perform schema validation if specified
+  if (options.schemaValidation) {
+    // Convert arrays to objects for schema validation if schemas are provided
+    if (options.schemaValidation.firstObjectSchema || options.schemaValidation.secondObjectSchema) {
+      const firstObject = { items: firstArray };
+      const secondObject = { items: secondArray };
+      
+      // Wrap the array schemas inside an object with 'items' property
+      const wrappedFirstSchema = options.schemaValidation.firstObjectSchema 
+        ? { items: [options.schemaValidation.firstObjectSchema] } 
+        : undefined;
+      
+      const wrappedSecondSchema = options.schemaValidation.secondObjectSchema 
+        ? { items: [options.schemaValidation.secondObjectSchema] } 
+        : undefined;
+      
+      const wrappedSchemaValidation: SchemaValidation = {
+        firstObjectSchema: wrappedFirstSchema,
+        secondObjectSchema: wrappedSecondSchema,
+        throwOnValidationFailure: options.schemaValidation.throwOnValidationFailure
+      };
+      
+      // Run the schema validation
+      validateObjectsAgainstSchemas(firstObject, secondObject, wrappedSchemaValidation);
+    }
+  }
+
   const isEqual = CompareArrays(firstArray, secondArray, options);
   
   return {
     isEqual,
-    firstType: Array.isArray(firstArray) ? 'array' : (firstArray === null ? 'null' : 'undefined'),
-    secondType: Array.isArray(secondArray) ? 'array' : (secondArray === null ? 'null' : 'undefined')
+    firstType: getTypeName(firstArray),
+    secondType: getTypeName(secondArray)
   };
 };
 
@@ -1469,53 +1737,36 @@ const TypeSafeCompareObjects = <T extends Record<string, unknown>, U extends Rec
  * @returns Array of typed detailed differences with type information
  */
 const TypeSafeCompareValuesWithDetailedDifferences = <T extends Record<string, unknown>, U extends Record<string, unknown>>(
-  firstObject: T | null | undefined,
-  secondObject: U | null | undefined,
+  firstObject: T,
+  secondObject: U,
   options: TypeSafeComparisonOptions<T, U> = {}
 ): TypedDetailedDifference[] => {
-  // Handle null and undefined cases
   if (!firstObject || !secondObject) {
-    return [{
-      path: '',
-      type: (!firstObject && !secondObject) ? 'changed' : (!firstObject ? 'added' : 'removed'),
-      oldValue: firstObject,
-      newValue: secondObject,
-      oldValueType: getTypeName(firstObject),
-      newValueType: getTypeName(secondObject)
-    }];
+    return [];
+  }
+
+  // Perform schema validation if specified
+  if (options.schemaValidation) {
+    validateObjectsAgainstSchemas(firstObject, secondObject, options.schemaValidation);
   }
   
-  // Apply property mapping if provided
-  let mappedFirstObject: Record<string, unknown> = firstObject;
-  if (options.propertyMapping && Object.keys(options.propertyMapping).length > 0) {
-    mappedFirstObject = {
-      ...firstObject,
-      ...mapObjectProperties(firstObject, options.propertyMapping)
-    };
+  // Get standard detailed differences
+  const differences = CompareValuesWithDetailedDifferences(firstObject, secondObject, '', options);
+  
+  // If we don't need type info, just return the standard differences
+  if (!options.includeTypeInfo) {
+    return differences as TypedDetailedDifference[];
   }
   
-  // Get detailed differences using existing function
-  const differences = CompareValuesWithDetailedDifferences(
-    mappedFirstObject as any, 
-    secondObject, 
-    '', 
-    {
-      strict: options.strict,
-      circularReferences: options.circularReferences,
-      pathFilter: options.pathFilter
-    }
-  );
-  
-  // Enhance with type information if requested
-  if (options.includeTypeInfo) {
-    return differences.map(diff => ({
+  // Add type information to each difference
+  return differences.map((diff: DetailedDifference) => {
+    const typedDiff: TypedDetailedDifference = {
       ...diff,
-      oldValueType: getTypeName(diff.oldValue),
-      newValueType: getTypeName(diff.newValue)
-    }));
-  }
-  
-  return differences as TypedDetailedDifference[];
+      oldValueType: diff.oldValue !== undefined ? getTypeName(diff.oldValue) : undefined,
+      newValueType: diff.newValue !== undefined ? getTypeName(diff.newValue) : undefined
+    };
+    return typedDiff;
+  });
 };
 
 /**
@@ -1665,5 +1916,6 @@ export {
   TypeSafeCompareValuesWithDetailedDifferences,
   ObjectsAreEqual,
   IsSubset,
-  GetCommonStructure
+  GetCommonStructure,
+  validateObjectsAgainstSchemas
 }; 

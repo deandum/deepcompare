@@ -60,6 +60,12 @@ export interface ComparisonOptions {
    * This allows filtering properties based on path patterns
    */
   pathFilter?: PathFilter;
+  
+  /**
+   * Schema validation options to validate objects structure before comparison
+   * This allows ensuring objects match expected structure before performing comparison
+   */
+  schemaValidation?: SchemaValidation;
 }
 
 /**
@@ -152,6 +158,56 @@ export type TypedComparisonResult<T, U> = {
 export interface TypedDetailedDifference extends DetailedDifference {
   oldValueType?: string;
   newValueType?: string;
+}
+
+/**
+ * Schema validation options for objects before comparison
+ */
+export interface SchemaValidation {
+  /**
+   * Schema for the first object in the comparison
+   * If provided, the first object will be validated against this schema before comparison
+   */
+  firstObjectSchema?: Record<string, unknown>;
+  
+  /**
+   * Schema for the second object in the comparison
+   * If provided, the second object will be validated against this schema before comparison
+   */
+  secondObjectSchema?: Record<string, unknown>;
+  
+  /**
+   * Whether to throw an error if schema validation fails
+   * - If true, an error will be thrown when validation fails
+   * - If false, validation results will be returned but comparison will continue
+   * @default false
+   */
+  throwOnValidationFailure?: boolean;
+}
+
+/**
+ * Result of schema validation
+ */
+export interface SchemaValidationResult {
+  /**
+   * Whether the first object passed schema validation
+   */
+  firstObjectValid: boolean;
+  
+  /**
+   * Whether the second object passed schema validation
+   */
+  secondObjectValid: boolean;
+  
+  /**
+   * List of validation errors for the first object
+   */
+  firstObjectErrors?: string[];
+  
+  /**
+   * List of validation errors for the second object
+   */
+  secondObjectErrors?: string[];
 }
 
 /**
