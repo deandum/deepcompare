@@ -14,11 +14,9 @@ import {
 import { 
   TypeSafeCompareArrays,
   TypeSafeCompareObjects,
-  TypeSafeCompareValuesWithDetailedDifferences,
-  MapObjectProperties
+  TypeSafeCompareValuesWithDetailedDifferences
 } from './src/type-safe/typed-comparisons';
 import { ValidateObjectsAgainstSchemas } from './src/core/schema-validation';
-import { Memoize } from './src/utils/memoization';
 import { 
   ComparisonOptions, 
   DetailedDifference, 
@@ -45,8 +43,6 @@ export {
   IsSubset,
   GetCommonStructure,
   ValidateObjectsAgainstSchemas,
-  MapObjectProperties,
-  Memoize,
   MemoizedCompareProperties,
   MemoizedCompareArrays,
   MemoizedCompareValuesWithConflicts,
