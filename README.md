@@ -1,6 +1,6 @@
 # object-deep-compare
 
-[![npm version](https://img.shields.io/badge/npm-v2.0.0-blue)](https://www.npmjs.com/package/object-deep-compare)
+[![npm version](https://img.shields.io/badge/npm-v2.1.0-blue)](https://www.npmjs.com/package/object-deep-compare)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/)
 [![Zero Dependencies](https://img.shields.io/badge/Zero-Dependencies-green.svg)](https://www.npmjs.com/package/object-deep-compare)
@@ -17,6 +17,7 @@ A type-safe collection of comparison methods for objects and arrays in TypeScrip
 - **RegExp support**: Correctly compares RegExp objects
 - **Performance optimized**: Efficient algorithms to minimize processing time
 - **Configurable**: Control comparison behavior through options
+- **Detailed difference reporting**: Get detailed information about each difference including type and actual values
 
 ## Installation
 
@@ -39,7 +40,12 @@ const objectDeepCompare = require('object-deep-compare');
 
 ### ES Modules
 ```ts
-import { CompareProperties, CompareArrays, CompareValuesWithConflicts } from 'object-deep-compare';
+import { 
+  CompareProperties, 
+  CompareArrays, 
+  CompareValuesWithConflicts,
+  CompareValuesWithDetailedDifferences 
+} from 'object-deep-compare';
 ```
 
 ## API Reference
@@ -154,6 +160,67 @@ const conflictsWithStrict = objectDeepCompare.CompareValuesWithConflicts(
 	{ strict: true }
 );
 console.log(conflictsWithStrict); // ['level1.level2.level3.value']
+```
+
+### `CompareValuesWithDetailedDifferences`
+This method performs a deep comparison of two objects and returns detailed information about each difference, including the type of difference and the actual values.
+
+#### Parameters:
+- `firstObject` - First object to compare
+- `secondObject` - Second object to compare
+- `pathOfConflict` (optional) - Starting path for conflict (default: '')
+- `options` (optional) - Comparison options
+  - `strict` - Whether to use strict equality (===) for comparing values (default: true)
+
+#### Returns:
+- `DetailedDifference[]`: Array of detailed difference objects, where each object includes:
+  - `path`: Path to the property that differs
+  - `type`: Type of difference ('added', 'removed', or 'changed')
+  - `oldValue`: Original value (undefined for added properties)
+  - `newValue`: New value (undefined for removed properties)
+
+#### Example:
+```ts
+const firstObject = {
+  user: {
+    name: 'John',
+    age: 30,
+    roles: ['admin']
+  }
+};
+const secondObject = {
+  user: {
+    name: 'John',
+    age: 31,
+    location: 'New York',
+    roles: ['admin', 'editor']
+  }
+};
+
+const detailedDiffs = objectDeepCompare.CompareValuesWithDetailedDifferences(firstObject, secondObject);
+console.log(detailedDiffs);
+/*
+Will return: [
+  {
+    path: 'user.age',
+    type: 'changed',
+    oldValue: 30,
+    newValue: 31
+  },
+  {
+    path: 'user.location',
+    type: 'added',
+    oldValue: undefined,
+    newValue: 'New York'
+  },
+  {
+    path: 'user.roles',
+    type: 'changed',
+    oldValue: ['admin'],
+    newValue: ['admin', 'editor']
+  }
+]
+*/
 ```
 
 ## Advanced Usage

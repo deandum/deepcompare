@@ -15,4 +15,23 @@ export interface ComparisonOptions {
    * @default true
    */
   strict?: boolean;
+}
+
+/**
+ * Type of difference between two values
+ */
+export type DifferenceType = 'added' | 'removed' | 'changed';
+
+/**
+ * Interface for detailed difference information
+ */
+export interface DetailedDifference {
+  /** Path to the property that differs */
+  path: string;
+  /** Type of difference */
+  type: DifferenceType;
+  /** Original value (undefined for added properties) */
+  oldValue?: any;
+  /** New value (undefined for removed properties) */
+  newValue?: any;
 } 

@@ -1,4 +1,4 @@
-import { ComparePropertiesResult, ComparisonOptions } from './types';
+import { ComparePropertiesResult, ComparisonOptions, DetailedDifference, DifferenceType } from './types';
 
 /**
  * Helper function to check if an object has a property
@@ -143,89 +143,197 @@ const CompareProperties = <T extends Record<string, any>, U extends Record<strin
  * @param secondValue - Second value to compare
  * @param currentPath - Current path for conflicts
  * @param options - Comparison options
- * @returns Array of conflict paths or boolean indicating equality
+ * @param isArrayComparison - Whether this is an array comparison
+ * @param detailed - Whether to return detailed difference information
+ * @returns Array of conflict paths or detailed differences, or boolean indicating equality
  */
 const handleDepthComparison = (
   firstValue: any,
   secondValue: any,
   currentPath: string,
   options: ComparisonOptions,
-  isArrayComparison: boolean
-): string[] | boolean => {
+  isArrayComparison: boolean,
+  detailed: boolean = false
+): string[] | DetailedDifference[] | boolean => {
   const { strict = true } = options;
 
   // Handle Date objects specially
   if (firstValue instanceof Date && secondValue instanceof Date) {
-    return firstValue.getTime() === secondValue.getTime() ? true : [currentPath];
+    if (firstValue.getTime() === secondValue.getTime()) {
+      return true;
+    }
+    return detailed 
+      ? [{ 
+          path: currentPath, 
+          type: 'changed', 
+          oldValue: firstValue, 
+          newValue: secondValue 
+        } as DetailedDifference] 
+      : [currentPath];
   }
 
   // Handle RegExp objects specially
   if (firstValue instanceof RegExp && secondValue instanceof RegExp) {
-    return firstValue.toString() === secondValue.toString() ? true : [currentPath];
+    if (firstValue.toString() === secondValue.toString()) {
+      return true;
+    }
+    return detailed 
+      ? [{ 
+          path: currentPath, 
+          type: 'changed', 
+          oldValue: firstValue, 
+          newValue: secondValue 
+        } as DetailedDifference] 
+      : [currentPath];
   }
 
   // Handle arrays
   if (Array.isArray(firstValue) && Array.isArray(secondValue)) {
     if (firstValue.length !== secondValue.length) {
-      return isArrayComparison ? false : [currentPath];
+      return isArrayComparison 
+        ? false 
+        : (detailed 
+            ? [{ 
+                path: currentPath, 
+                type: 'changed', 
+                oldValue: firstValue, 
+                newValue: secondValue 
+              } as DetailedDifference] 
+            : [currentPath]);
     }
     
-    // When comparing arrays within objects (not direct array comparison)
-    if (!isArrayComparison && currentPath) {
-      for (let i = 0; i < firstValue.length; i++) {
-        const elemResult = handleDepthComparison(
+    // For direct array comparison or nested arrays
+    const conflicts = detailed ? [] as DetailedDifference[] : [] as string[];
+    let hasConflict = false;
+    
+    // Iterate through array elements and compare them
+    for (let i = 0; i < firstValue.length; i++) {
+      // Construct the array element path
+      const elemPath = `${currentPath}[${i}]`;
+      
+      // Compare array elements
+      if (isObject(firstValue[i]) && isObject(secondValue[i])) {
+        // Recursively compare objects within arrays
+        const result = handleDepthComparison(
           firstValue[i],
           secondValue[i],
-          `${currentPath}[${i}]`,
+          elemPath,
           options,
-          true
+          false,
+          detailed
         );
-        if (elemResult !== true) {
-          return [currentPath]; // Return the parent array path for conflicts in nested arrays
+        
+        if (result !== true) {
+          hasConflict = true;
+          if (Array.isArray(result)) {
+            if (detailed) {
+              (conflicts as DetailedDifference[]).push(...(result as DetailedDifference[]));
+            } else {
+              (conflicts as string[]).push(...(result as string[]));
+            }
+          }
+        }
+      } else if (Array.isArray(firstValue[i]) && Array.isArray(secondValue[i])) {
+        // Recursively compare nested arrays
+        const result = handleDepthComparison(
+          firstValue[i],
+          secondValue[i],
+          elemPath,
+          options,
+          true,
+          detailed
+        );
+        
+        if (result !== true) {
+          hasConflict = true;
+          if (Array.isArray(result)) {
+            if (detailed) {
+              (conflicts as DetailedDifference[]).push(...(result as DetailedDifference[]));
+            } else {
+              (conflicts as string[]).push(...(result as string[]));
+            }
+          } else if (result === false) {
+            // For arrays compared directly
+            if (detailed) {
+              (conflicts as DetailedDifference[]).push({
+                path: elemPath,
+                type: 'changed',
+                oldValue: firstValue[i],
+                newValue: secondValue[i]
+              });
+            } else {
+              (conflicts as string[]).push(elemPath);
+            }
+          }
+        }
+      } else if (!areValuesEqual(firstValue[i], secondValue[i], strict)) {
+        // For primitive values that are not equal
+        hasConflict = true;
+        if (detailed) {
+          (conflicts as DetailedDifference[]).push({
+            path: elemPath,
+            type: 'changed',
+            oldValue: firstValue[i],
+            newValue: secondValue[i]
+          });
+        } else {
+          (conflicts as string[]).push(elemPath);
         }
       }
-      return true;
     }
     
-    // For direct array comparison or nested arrays in arrays
-    for (let i = 0; i < firstValue.length; i++) {
-      const result = handleDepthComparison(
-        firstValue[i],
-        secondValue[i],
-        `${currentPath}[${i}]`,
-        options,
-        true
-      );
-      if (result !== true) return result;
+    if (isArrayComparison && hasConflict && conflicts.length === 0) {
+      return false;
     }
-    return true;
+    
+    return conflicts.length > 0 ? conflicts : true;
   }
 
   // Handle objects
   if (isObject(firstValue) && isObject(secondValue)) {
     const allKeys = new Set([...Object.keys(firstValue), ...Object.keys(secondValue)]);
-    const conflicts: string[] = [];
+    const conflicts = detailed ? [] as DetailedDifference[] : [] as string[];
     
     allKeys.forEach(key => {
+      const hasFirst = hasOwn(firstValue, key);
+      const hasSecond = hasOwn(secondValue, key);
+      const propPath = currentPath ? `${currentPath}.${key}` : key;
+      
       // If key exists in one but not in the other
-      if (!hasOwn(firstValue, key) || !hasOwn(secondValue, key)) {
-        conflicts.push(currentPath ? `${currentPath}.${key}` : key);
+      if (!hasFirst || !hasSecond) {
+        if (detailed) {
+          const type: DifferenceType = !hasFirst ? 'added' : 'removed';
+          (conflicts as DetailedDifference[]).push({ 
+            path: propPath, 
+            type, 
+            oldValue: !hasFirst ? undefined : firstValue[key], 
+            newValue: !hasSecond ? undefined : secondValue[key] 
+          });
+        } else {
+          (conflicts as string[]).push(propPath);
+        }
         return;
       }
       
+      // Both objects have the key, compare their values
       const result = handleDepthComparison(
         firstValue[key],
         secondValue[key],
-        currentPath ? `${currentPath}.${key}` : key,
+        propPath,
         options,
-        false
+        false,
+        detailed
       );
       
       if (result !== true) {
         if (Array.isArray(result)) {
-          conflicts.push(...result);
+          if (detailed) {
+            (conflicts as DetailedDifference[]).push(...(result as DetailedDifference[]));
+          } else {
+            (conflicts as string[]).push(...(result as string[]));
+          }
         } else if (typeof result === 'string') {
-          conflicts.push(result);
+          (conflicts as string[]).push(result);
         }
       }
     });
@@ -234,7 +342,18 @@ const handleDepthComparison = (
   }
 
   // Handle primitive values
-  return areValuesEqual(firstValue, secondValue, strict) ? true : [currentPath];
+  if (areValuesEqual(firstValue, secondValue, strict)) {
+    return true;
+  }
+  
+  return detailed 
+    ? [{ 
+        path: currentPath, 
+        type: 'changed', 
+        oldValue: firstValue, 
+        newValue: secondValue 
+      } as DetailedDifference] 
+    : [currentPath];
 };
 
 /**
@@ -256,7 +375,7 @@ const CompareArrays = (
   }
 
   // Use the unified depth handling function
-  return handleDepthComparison(firstArray, secondArray, '', options, true) === true;
+  return handleDepthComparison(firstArray, secondArray, '', options, true, false) === true;
 };
 
 /**
@@ -276,8 +395,51 @@ const CompareValuesWithConflicts = <T extends Record<string, any>, U extends Rec
   options: ComparisonOptions = {}
 ): string[] => {
   // Use the unified depth handling function
-  const conflicts = handleDepthComparison(firstObject, secondObject, pathOfConflict, options, false);
-  return Array.isArray(conflicts) ? conflicts : [];
+  const conflicts = handleDepthComparison(firstObject, secondObject, pathOfConflict, options, false, false);
+  
+  if (!Array.isArray(conflicts)) {
+    return [];
+  }
+  
+  // Type assertion because we know the conflicts will be strings due to detailed=false parameter
+  const stringConflicts = conflicts as string[];
+  
+  // Post-process the conflicts to maintain backward compatibility
+  // This ensures arrays are reported at their parent level only
+  const processedConflicts = new Set<string>();
+  
+  for (const conflict of stringConflicts) {
+    // If this is an array element conflict (contains [), get the array path
+    if (conflict.includes('[')) {
+      const arrayPath = conflict.substring(0, conflict.indexOf('['));
+      processedConflicts.add(arrayPath);
+    } else {
+      processedConflicts.add(conflict);
+    }
+  }
+  
+  return Array.from(processedConflicts);
+};
+
+/**
+ * Compares the properties of two objects (deep comparison)
+ * Returns detailed information about differences including type and values
+ *
+ * @param firstObject - First object to compare
+ * @param secondObject - Second object to compare
+ * @param pathOfConflict - Starting path for conflict (used in recursion)
+ * @param options - Comparison options
+ * @return Array of detailed differences
+ */
+const CompareValuesWithDetailedDifferences = <T extends Record<string, any>, U extends Record<string, any>>(
+  firstObject: T,
+  secondObject: U,
+  pathOfConflict: string = '',
+  options: ComparisonOptions = {}
+): DetailedDifference[] => {
+  // Use the unified depth handling function with detailed flag
+  const conflicts = handleDepthComparison(firstObject, secondObject, pathOfConflict, options, false, true);
+  return Array.isArray(conflicts) ? conflicts as DetailedDifference[] : [];
 };
 
 /**
@@ -345,6 +507,24 @@ const compareValuesWithConflictsKeyFn = <T extends Record<string, any>, U extend
 };
 
 /**
+ * Generate a cache key for CompareValuesWithDetailedDifferences
+ */
+const compareValuesWithDetailedDifferencesKeyFn = <T extends Record<string, any>, U extends Record<string, any>>(
+  firstObject: T,
+  secondObject: U,
+  pathOfConflict: string = '',
+  options: ComparisonOptions = {}
+): string => {
+  // Include path and options in the cache key
+  return JSON.stringify([
+    firstObject,
+    secondObject,
+    pathOfConflict,
+    options
+  ]);
+};
+
+/**
  * Memoized version of CompareProperties
  */
 const MemoizedCompareProperties = memoize(CompareProperties, comparePropertiesKeyFn);
@@ -362,12 +542,22 @@ const MemoizedCompareValuesWithConflicts = memoize(
   compareValuesWithConflictsKeyFn
 );
 
+/**
+ * Memoized version of CompareValuesWithDetailedDifferences
+ */
+const MemoizedCompareValuesWithDetailedDifferences = memoize(
+  CompareValuesWithDetailedDifferences, 
+  compareValuesWithDetailedDifferencesKeyFn
+);
+
 export {
   CompareProperties,
   CompareArrays,
   CompareValuesWithConflicts,
+  CompareValuesWithDetailedDifferences,
   MemoizedCompareProperties,
   MemoizedCompareArrays,
   MemoizedCompareValuesWithConflicts,
+  MemoizedCompareValuesWithDetailedDifferences,
   memoize
 }; 

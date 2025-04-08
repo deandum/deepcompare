@@ -1,5 +1,5 @@
 import * as objectDeepCompare from './src/main';
-import { ComparisonOptions } from './src/types';
+import { ComparisonOptions, DetailedDifference } from './src/types';
 
 /**
  * Compares the properties of two objects and returns their differences and commonalities
@@ -22,7 +22,7 @@ const CompareProperties = <T extends Record<string, any>, U extends Record<strin
  * 
  * @param firstArray - First array to compare
  * @param secondArray - Second array to compare
- * @param options - Optional comparison options (maxDepth, strict)
+ * @param options - Optional comparison options (strict)
  * @returns Boolean indicating if arrays are equal
  */
 const CompareArrays = (
@@ -39,7 +39,7 @@ const CompareArrays = (
  * @param firstObject - First object to compare
  * @param secondObject - Second object to compare
  * @param pathOfConflict - Starting path for conflict (optional)
- * @param options - Optional comparison options (maxDepth, strict)
+ * @param options - Optional comparison options (strict)
  * @returns Array of conflict paths or null if inputs are invalid
  */
 const CompareValuesWithConflicts = <T extends Record<string, any>, U extends Record<string, any>>(
@@ -58,8 +58,36 @@ const CompareValuesWithConflicts = <T extends Record<string, any>, U extends Rec
   );
 };
 
+/**
+ * Compares two objects and returns detailed information about differences 
+ * including type (added, removed, changed) and actual values
+ * 
+ * @param firstObject - First object to compare
+ * @param secondObject - Second object to compare
+ * @param pathOfConflict - Starting path for conflict (optional)
+ * @param options - Optional comparison options (strict)
+ * @returns Array of detailed differences or null if inputs are invalid
+ */
+const CompareValuesWithDetailedDifferences = <T extends Record<string, any>, U extends Record<string, any>>(
+  firstObject: T | null | undefined,
+  secondObject: U | null | undefined,
+  pathOfConflict?: string,
+  options?: ComparisonOptions
+) => {
+  if (!firstObject) { return null; }
+  if (!secondObject) { return null; }
+  return objectDeepCompare.CompareValuesWithDetailedDifferences(
+    firstObject, 
+    secondObject, 
+    pathOfConflict || '',
+    options
+  );
+};
+
 export {
   CompareProperties,
   CompareArrays,
-  CompareValuesWithConflicts
+  CompareValuesWithConflicts,
+  CompareValuesWithDetailedDifferences,
+  DetailedDifference
 }; 

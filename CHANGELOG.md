@@ -2,6 +2,20 @@
 
 All notable changes to the object-deep-compare project will be documented in this file.
 
+## [2.1.0] - 2024-04-08
+
+### Added
+- **Detailed Difference Reporting**:
+  - New `CompareValuesWithDetailedDifferences` function that returns detailed information about differences
+  - Each difference now includes the type of difference ('added', 'removed', 'changed')
+  - Actual values that differ are included in the conflict report (oldValue and newValue)
+  - New `DetailedDifference` type that represents the enhanced difference information
+- **Memoized version** of the new function available as `MemoizedCompareValuesWithDetailedDifferences`
+
+### Fixed
+- Improved array element comparison to report individual element differences
+- Maintained backward compatibility for existing API functions
+
 ## [2.0.0] - 2024-04-08
 
 ### Breaking Changes
