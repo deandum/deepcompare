@@ -28,7 +28,8 @@
     "zero-dependency",
     "performant"
   ],
-  "author": "Dean Dumitru <dumitruodean@gmail.com>",
+  "author": "Dean Dumitru <ddumitru@byteboost.tech>",
+  "website": "https://byteboost.tech",
   "license": "MIT",
   "dependencies": {},
   "devDependencies": {

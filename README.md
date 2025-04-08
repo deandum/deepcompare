@@ -1206,3 +1206,7 @@ const { CompareArrays } = require('object-deep-compare');
 
 const isEqual = CompareArrays(array1, array2, options);
 ```
+
+## 🔧 Developed by ByteBoost
+
+This library is maintained by **ByteBoost** - a software development company that builds high-quality, performant solutions for businesses of all sizes. Need custom development, performance optimization, or technical consulting? [Contact us](https://byteboost.tech/#contact) to elevate your tech.
